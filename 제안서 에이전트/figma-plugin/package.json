@@ -1,0 +1,16 @@
+{
+  "name": "proposal-html-to-figma",
+  "version": "1.0.0",
+  "description": "제안서 HTML을 Figma 네이티브 요소로 변환하는 플러그인",
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.98.0",
+    "esbuild": "^0.20.0"
+  },
+  "dependencies": {
+    "puppeteer": "^24.40.0"
+  }
+}

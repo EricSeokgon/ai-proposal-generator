@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px; height: 900px; overflow: hidden;
+    background: #1A1A1A;
+    font-family: 'Noto Sans KR', sans-serif;
+  }
+  .title {
+    text-align: center; padding: 40px 0 10px;
+    font-size: 36px; font-weight: 700; color: #FFFFFF;
+  }
+  .subtitle {
+    text-align: center; font-size: 20px; color: #888;
+    margin-bottom: 20px;
+  }
+  .chart-wrap {
+    position: relative;
+    width: 1100px; height: 680px;
+    margin: 0 auto;
+  }
+  /* Quadrant lines */
+  .axis-h {
+    position: absolute;
+    left: 80px; right: 40px;
+    top: 50%; height: 2px;
+    background: #333;
+  }
+  .axis-v {
+    position: absolute;
+    top: 20px; bottom: 60px;
+    left: 50%; width: 2px;
+    background: #333;
+  }
+  /* Axis arrows */
+  .arrow-right {
+    position: absolute;
+    right: 30px; top: calc(50% - 8px);
+    width: 0; height: 0;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 14px solid #555;
+  }
+  .arrow-up {
+    position: absolute;
+    top: 10px; left: calc(50% - 8px);
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-bottom: 14px solid #555;
+  }
+  /* Axis Labels */
+  .ax-label {
+    position: absolute;
+    font-size: 18px; font-weight: 600; color: #666;
+    white-space: nowrap;
+  }
+  .ax-x-low  { bottom: 20px; left: 85px; }
+  .ax-x-high { bottom: 20px; right: 45px; }
+  .ax-y-low  { left: 10px; top: 50%; transform: translateY(10px); writing-mode: vertical-rl; text-orientation: mixed; transform: translateY(10px) rotate(180deg); }
+  .ax-y-high { left: 10px; top: 30px; writing-mode: vertical-rl; text-orientation: mixed; transform: rotate(180deg); }
+
+  /* Brand dots */
+  .brand {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+  }
+  .dot {
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+  }
+  .dot-gray { background: #444; width: 48px; height: 48px; }
+  .dot-orange {
+    background: #EF7B00; width: 72px; height: 72px;
+    box-shadow: 0 0 40px rgba(239,123,0,0.6);
+    font-size: 14px;
+  }
+  .brand-label {
+    font-size: 16px; font-weight: 600; color: #CCCCCC;
+    white-space: nowrap;
+  }
+  .brand-label-orange {
+    font-size: 18px; font-weight: 700; color: #EF7B00;
+  }
+  .brand-price {
+    font-size: 13px; color: #777;
+  }
+
+  /* Quadrant hints */
+  .q-hint {
+    position: absolute;
+    font-size: 14px; color: #333;
+  }
+</style>
+</head>
+<body>
+<div class="title">포지셔닝 매트릭스</div>
+<div class="subtitle">가격 대비 A/S 신뢰도 경쟁 분석</div>
+<div class="chart-wrap">
+  <div class="axis-h"></div>
+  <div class="axis-v"></div>
+  <div class="arrow-right"></div>
+  <div class="arrow-up"></div>
+
+  <!-- Axis labels -->
+  <span class="ax-label ax-x-low">저가</span>
+  <span class="ax-label ax-x-high">고가 →</span>
+  <span class="ax-label" style="bottom:20px;left:44%;font-size:18px;color:#666;">가격</span>
+  <span class="ax-label" style="left:14px;top:calc(50%-60px);writing-mode:vertical-rl;transform:rotate(180deg);font-size:18px;color:#666;">A/S 신뢰도</span>
+  <span class="ax-label" style="left:16px;top:22px;writing-mode:vertical-rl;transform:rotate(180deg);font-size:16px;color:#555;">높음 ↑</span>
+  <span class="ax-label" style="left:16px;top:55%;writing-mode:vertical-rl;transform:rotate(180deg);font-size:16px;color:#555;">낮음</span>
+
+  <!-- 중국산 (가격:저, A/S:낮) => x≈15%, y≈75% from top -->
+  <div class="brand" style="left:18%;top:76%;">
+    <div class="dot dot-gray">CN</div>
+    <div class="brand-label">중국산</div>
+    <div class="brand-price">~9만원</div>
+  </div>
+
+  <!-- 크래프트볼트 (가격:중, A/S:높) => x≈42%, y≈22% -->
+  <div class="brand" style="left:42%;top:22%;">
+    <div class="dot dot-orange">CV</div>
+    <div class="brand-label-orange">크래프트볼트</div>
+    <div class="brand-price" style="color:#EF7B00;font-weight:600;">14만원</div>
+  </div>
+
+  <!-- 보쉬 (가격:고, A/S:높) => x≈68%, y≈20% -->
+  <div class="brand" style="left:68%;top:20%;">
+    <div class="dot dot-gray">BS</div>
+    <div class="brand-label">보쉬</div>
+    <div class="brand-price">~22만원</div>
+  </div>
+
+  <!-- 디월트 (가격:최고, A/S:최고) => x≈88%, y≈14% -->
+  <div class="brand" style="left:88%;top:14%;">
+    <div class="dot dot-gray">DW</div>
+    <div class="brand-label">디월트</div>
+    <div class="brand-price">~29만원</div>
+  </div>
+
+  <!-- Sweet spot label -->
+  <div style="position:absolute;left:38%;top:34%;
+    border:2px dashed #EF7B00;border-radius:8px;
+    padding:6px 14px;font-size:14px;color:#EF7B00;white-space:nowrap;">
+    가성비 스위트스팟
+  </div>
+</div>
+</body>
+</html>

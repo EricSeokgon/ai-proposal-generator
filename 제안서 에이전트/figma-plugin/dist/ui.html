@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; padding: 16px; background: #1e1e1e; color: #e0e0e0; }
+    h2 { font-size: 14px; margin-bottom: 12px; color: #fff; }
+    .desc { font-size: 11px; color: #777; margin-bottom: 12px; line-height: 1.5; }
+    .desc code { background: #333; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
+    .drop-zone {
+      border: 2px dashed #555; border-radius: 8px; padding: 32px 16px;
+      text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #0d99ff; background: rgba(13,153,255,0.08); }
+    .drop-zone p { font-size: 13px; color: #999; }
+    .drop-zone .icon { font-size: 32px; margin-bottom: 8px; }
+    input[type="file"] { display: none; }
+    .status { font-size: 12px; color: #999; margin-top: 8px; min-height: 16px; }
+    .status.success { color: #0d99ff; }
+    .status.error { color: #f24822; }
+    .btn {
+      width: 100%; padding: 10px; border: none; border-radius: 6px;
+      background: #0d99ff; color: white; font-size: 13px; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { background: #0b85e0; }
+    .progress { margin-top: 12px; }
+    .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #0d99ff; width: 0%; transition: width 0.3s; }
+    .progress-text { font-size: 11px; color: #777; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h2>Proposal HTML → Figma</h2>
+  <div class="desc">
+    먼저 터미널에서 JSON 생성:<br>
+    <code>node render.js presentation.html</code><br>
+    그 후 생성된 .figma.json 파일을 아래에 드롭
+  </div>
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">📄</div>
+    <p>.figma.json 파일을 드래그하거나 클릭</p>
+  </div>
+  <input type="file" id="fileInput" accept=".json" />
+  <button class="btn" id="convertBtn" disabled>Figma로 변환</button>
+  <div class="status" id="status"></div>
+  <div class="progress" style="display:none" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText"></div>
+  </div>
+  <script>"use strict";
+(() => {
+  // src/ui.ts
+  var dropZone = document.getElementById("dropZone");
+  var fileInput = document.getElementById("fileInput");
+  var convertBtn = document.getElementById("convertBtn");
+  var statusEl = document.getElementById("status");
+  var progressWrap = document.getElementById("progressWrap");
+  var progressFill = document.getElementById("progressFill");
+  var progressText = document.getElementById("progressText");
+  var loadedData = null;
+  dropZone.addEventListener("click", function() {
+    fileInput.click();
+  });
+  dropZone.addEventListener("dragover", function(e) {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+  dropZone.addEventListener("dragleave", function() {
+    dropZone.classList.remove("dragover");
+  });
+  dropZone.addEventListener("drop", function(e) {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    if (e.dataTransfer?.files[0])
+      handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", function() {
+    if (fileInput.files?.[0])
+      handleFile(fileInput.files[0]);
+  });
+  function handleFile(file) {
+    if (!file.name.endsWith(".json")) {
+      setStatus(".figma.json \uD30C\uC77C\uB9CC \uC9C0\uC6D0\uD569\uB2C8\uB2E4", "error");
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        loadedData = JSON.parse(e.target?.result);
+        if (!Array.isArray(loadedData) || loadedData.length === 0) {
+          setStatus("\uC720\uD6A8\uD558\uC9C0 \uC54A\uC740 JSON \uD615\uC2DD", "error");
+          return;
+        }
+        setStatus(file.name + " \u2014 " + loadedData.length + "\uAC1C \uC2AC\uB77C\uC774\uB4DC", "success");
+        convertBtn.disabled = false;
+        dropZone.querySelector("p").textContent = file.name;
+      } catch (err) {
+        setStatus("JSON \uD30C\uC2F1 \uC624\uB958: " + err.message, "error");
+      }
+    };
+    reader.readAsText(file);
+  }
+  convertBtn.addEventListener("click", function() {
+    if (!loadedData)
+      return;
+    convertBtn.disabled = true;
+    progressWrap.style.display = "block";
+    setProgress(10, "Figma \uBCC0\uD658 \uC911...");
+    parent.postMessage({
+      pluginMessage: { type: "CREATE_SLIDES", slides: loadedData, totalSlides: loadedData.length }
+    }, "*");
+  });
+  window.onmessage = function(event) {
+    var msg = event.data.pluginMessage;
+    if (!msg)
+      return;
+    if (msg.type === "PROGRESS")
+      setProgress(msg.percent, msg.message);
+    else if (msg.type === "COMPLETE") {
+      setProgress(100, "\uC644\uB8CC!");
+      setStatus(msg.slideCount + "\uAC1C \uC2AC\uB77C\uC774\uB4DC \uBCC0\uD658 \uC644\uB8CC!", "success");
+      convertBtn.disabled = false;
+    } else if (msg.type === "ERROR") {
+      setStatus("\uC624\uB958: " + msg.message, "error");
+      convertBtn.disabled = false;
+    }
+  };
+  function setStatus(m, t) {
+    statusEl.textContent = m;
+    statusEl.className = "status " + t;
+  }
+  function setProgress(p, m) {
+    progressFill.style.width = p + "%";
+    progressText.textContent = m;
+  }
+})();
+</script>
+</body>
+</html>

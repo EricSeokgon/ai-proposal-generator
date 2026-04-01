@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px; height: 900px; overflow: hidden;
+    background: #FFFFFF;
+    font-family: 'Noto Sans KR', sans-serif;
+    display: flex; flex-direction: column;
+    padding: 60px 120px 50px;
+  }
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    margin-bottom: 40px;
+  }
+  .title { font-size: 38px; font-weight: 700; color: #1A1A1A; }
+  .subtitle { font-size: 20px; color: #888; margin-top: 6px; }
+  .legend { display: flex; gap: 32px; align-items: center; }
+  .leg-item { display: flex; align-items: center; gap: 10px; }
+  .leg-line { width: 32px; height: 4px; border-radius: 2px; }
+  .leg-dash {
+    width: 32px; height: 0;
+    border-top: 3px dashed #EF4444;
+  }
+  .leg-text { font-size: 17px; font-weight: 600; color: #555; }
+  .chart-container { flex: 1; position: relative; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="title">월별 ROAS 추이</div>
+    <div class="subtitle">광고 수익률 개선 목표 (%)  |  BEP: 292%</div>
+  </div>
+  <div class="legend">
+    <div class="leg-item">
+      <div class="leg-line" style="background:#EF7B00;"></div>
+      <div class="leg-text">ROAS 추이</div>
+    </div>
+    <div class="leg-item">
+      <div class="leg-dash"></div>
+      <div class="leg-text">손익분기점 (BEP 292%)</div>
+    </div>
+  </div>
+</div>
+<div class="chart-container">
+  <canvas id="roasLine"></canvas>
+</div>
+<script>
+const ctx = document.getElementById('roasLine').getContext('2d');
+
+// Gradient fill
+const gradient = ctx.createLinearGradient(0, 0, 0, 500);
+gradient.addColorStop(0, 'rgba(239,123,0,0.25)');
+gradient.addColorStop(1, 'rgba(239,123,0,0)');
+
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: ['4월', '5월', '6월'],
+    datasets: [
+      {
+        label: 'ROAS',
+        data: [350, 500, 550],
+        borderColor: '#EF7B00',
+        backgroundColor: gradient,
+        borderWidth: 4,
+        pointBackgroundColor: '#EF7B00',
+        pointBorderColor: '#FFFFFF',
+        pointBorderWidth: 3,
+        pointRadius: 10,
+        pointHoverRadius: 12,
+        tension: 0.4,
+        fill: true
+      },
+      {
+        label: 'BEP',
+        data: [292, 292, 292],
+        borderColor: '#EF4444',
+        borderWidth: 2.5,
+        borderDash: [10, 6],
+        pointRadius: 0,
+        fill: false,
+        tension: 0
+      }
+    ]
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: { enabled: false }
+    },
+    scales: {
+      x: {
+        grid: { display: false },
+        ticks: {
+          font: { family: 'Noto Sans KR', size: 24, weight: '600' },
+          color: '#444'
+        },
+        border: { display: false }
+      },
+      y: {
+        min: 0, max: 650,
+        grid: { color: '#F0F0F0' },
+        ticks: {
+          font: { family: 'Noto Sans KR', size: 16 },
+          color: '#888',
+          callback: v => v + '%'
+        },
+        border: { display: false }
+      }
+    },
+    layout: { padding: { top: 60, right: 40 } }
+  },
+  plugins: [{
+    id: 'pointLabels',
+    afterDatasetsDraw(chart) {
+      const { ctx } = chart;
+      const meta = chart.getDatasetMeta(0);
+      const values = ['350%', '500%', '550%'];
+      const colors = ['#EF7B00', '#EF7B00', '#EF7B00'];
+
+      meta.data.forEach((point, i) => {
+        ctx.save();
+        ctx.font = 'bold 22px Noto Sans KR';
+        ctx.fillStyle = colors[i];
+        ctx.textAlign = 'center';
+        ctx.fillText(values[i], point.x, point.y - 22);
+        ctx.restore();
+      });
+
+      // BEP label
+      const xScale = chart.scales.x;
+      const yScale = chart.scales.y;
+      const bepY = yScale.getPixelForValue(292);
+      const rightX = chart.chartArea.right;
+      ctx.save();
+      ctx.font = 'bold 16px Noto Sans KR';
+      ctx.fillStyle = '#EF4444';
+      ctx.textAlign = 'right';
+      ctx.fillText('BEP 292%', rightX - 4, bepY - 10);
+      ctx.restore();
+    }
+  }]
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px; height: 900px; overflow: hidden;
+    background: #1A1A1A;
+    font-family: 'Noto Sans KR', sans-serif;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .container {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 48px; width: 100%; height: 100%;
+  }
+  .label-top {
+    font-size: 28px; font-weight: 600;
+    color: #888; letter-spacing: 0.15em; text-transform: uppercase;
+  }
+  .hero-number {
+    font-size: 200px; font-weight: 900; line-height: 1;
+    color: #EF7B00;
+    text-shadow: 0 0 80px rgba(239,123,0,0.4);
+  }
+  .hero-sub {
+    font-size: 32px; font-weight: 600; color: #FFFFFF;
+    letter-spacing: 0.05em;
+  }
+  .divider {
+    width: 120px; height: 4px; background: #EF7B00;
+    border-radius: 2px;
+  }
+  .stats-row {
+    display: flex; gap: 80px; align-items: center;
+  }
+  .stat-item {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 10px;
+  }
+  .stat-dot {
+    width: 10px; height: 10px; background: #EF7B00;
+    border-radius: 50%; margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 26px; font-weight: 700; color: #EF7B00;
+  }
+  .stat-label {
+    font-size: 18px; font-weight: 400; color: #AAAAAA;
+    text-align: center;
+  }
+  .stat-sep {
+    width: 1px; height: 60px; background: #333;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="label-top">국내 DIY 공구 시장 규모</div>
+  <div class="hero-number">1조원+</div>
+  <div class="hero-sub">2026년 추정 시장 규모</div>
+  <div class="divider"></div>
+  <div class="stats-row">
+    <div class="stat-item">
+      <div class="stat-dot"></div>
+      <div class="stat-value">+18%</div>
+      <div class="stat-label">가정용 DIY<br>연간 성장률</div>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat-item">
+      <div class="stat-dot"></div>
+      <div class="stat-value">봄 시즌</div>
+      <div class="stat-label">검색량 최고점<br>3~4월 집중</div>
+    </div>
+    <div class="stat-sep"></div>
+    <div class="stat-item">
+      <div class="stat-dot"></div>
+      <div class="stat-value">21V</div>
+      <div class="stat-label">배터리 표준화<br>업계 사실상 표준</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

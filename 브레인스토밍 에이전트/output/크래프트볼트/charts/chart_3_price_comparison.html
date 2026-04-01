@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px; height: 900px; overflow: hidden;
+    background: #FFFFFF;
+    font-family: 'Noto Sans KR', sans-serif;
+    display: flex; flex-direction: column;
+    padding: 60px 120px;
+  }
+  .title {
+    font-size: 38px; font-weight: 700; color: #1A1A1A;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: 20px; color: #888;
+    margin-bottom: 50px;
+  }
+  .chart-area {
+    flex: 1; display: flex; flex-direction: column;
+    justify-content: space-evenly;
+    position: relative;
+  }
+  .bar-row {
+    display: flex; align-items: center; gap: 20px;
+  }
+  .bar-label {
+    width: 180px; text-align: right;
+    font-size: 20px; font-weight: 600; color: #444;
+    flex-shrink: 0;
+  }
+  .bar-label-orange { color: #EF7B00; font-weight: 700; }
+  .bar-track {
+    flex: 1; height: 56px;
+    background: #F5F5F5; border-radius: 6px;
+    position: relative; overflow: visible;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 6px;
+    display: flex; align-items: center;
+    position: relative;
+    transition: none;
+  }
+  .bar-fill-gray { background: #D1D5DB; }
+  .bar-fill-orange {
+    background: #EF7B00;
+    box-shadow: 0 4px 20px rgba(239,123,0,0.35);
+  }
+  .bar-value {
+    position: absolute; right: -90px;
+    font-size: 22px; font-weight: 700; color: #1A1A1A;
+    white-space: nowrap;
+  }
+  .bar-value-orange { color: #EF7B00; }
+
+  /* 50% 절감 arrow */
+  .saving-annotation {
+    position: absolute;
+    right: 10px; top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+  }
+  .saving-line {
+    width: 3px; height: 120px;
+    background: #EF7B00;
+    position: relative;
+  }
+  .saving-line::before, .saving-line::after {
+    content: '';
+    position: absolute;
+    left: -6px;
+    width: 15px; height: 3px;
+    background: #EF7B00;
+  }
+  .saving-line::before { top: 0; }
+  .saving-line::after { bottom: 0; }
+  .saving-badge {
+    background: #EF7B00; color: #fff;
+    font-size: 20px; font-weight: 700;
+    padding: 10px 20px; border-radius: 8px;
+    white-space: nowrap;
+  }
+  .grid-lines {
+    position: absolute; top: 0; left: 200px; right: 0; bottom: 0;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div class="title">경쟁 브랜드 가격 비교</div>
+<div class="subtitle">동급 21V 드릴드라이버 기준 출하가 비교</div>
+<div class="chart-area">
+  <!-- dewalt 29 / max=30 => 96.7% -->
+  <div class="bar-row">
+    <div class="bar-label">디월트</div>
+    <div class="bar-track">
+      <div class="bar-fill bar-fill-gray" style="width:96.7%;">
+        <span class="bar-value">290,000원</span>
+      </div>
+    </div>
+  </div>
+  <!-- bosch 22 => 73.3% -->
+  <div class="bar-row">
+    <div class="bar-label">보쉬</div>
+    <div class="bar-track">
+      <div class="bar-fill bar-fill-gray" style="width:73.3%;">
+        <span class="bar-value">220,000원</span>
+      </div>
+    </div>
+  </div>
+  <!-- craftvolt 14 => 46.7% -->
+  <div class="bar-row">
+    <div class="bar-label bar-label-orange">크래프트볼트</div>
+    <div class="bar-track">
+      <div class="bar-fill bar-fill-orange" style="width:46.7%;">
+        <span class="bar-value bar-value-orange">140,000원</span>
+      </div>
+    </div>
+  </div>
+  <!-- 중국산 9 => 30% -->
+  <div class="bar-row">
+    <div class="bar-label">중국산</div>
+    <div class="bar-track">
+      <div class="bar-fill bar-fill-gray" style="width:30%;">
+        <span class="bar-value">90,000원</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 50% 절감 annotation -->
+<div style="position:absolute; right:180px; top:290px;
+  display:flex; flex-direction:column; align-items:center; gap:0;">
+  <!-- bracket -->
+  <div style="width:3px;height:50px;background:#EF7B00;position:relative;">
+    <div style="position:absolute;top:0;left:-7px;width:17px;height:3px;background:#EF7B00;"></div>
+  </div>
+  <div style="background:#EF7B00;color:#fff;font-size:18px;font-weight:700;
+    padding:8px 16px;border-radius:6px;white-space:nowrap;margin:4px 0;">
+    ↓ 약 50% 절감
+  </div>
+  <div style="width:3px;height:50px;background:#EF7B00;position:relative;">
+    <div style="position:absolute;bottom:0;left:-7px;width:17px;height:3px;background:#EF7B00;"></div>
+  </div>
+</div>
+</body>
+</html>

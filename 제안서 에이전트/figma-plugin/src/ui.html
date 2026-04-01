@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', sans-serif; padding: 16px; background: #1e1e1e; color: #e0e0e0; }
+    h2 { font-size: 14px; margin-bottom: 12px; color: #fff; }
+    .desc { font-size: 11px; color: #777; margin-bottom: 12px; line-height: 1.5; }
+    .desc code { background: #333; padding: 2px 4px; border-radius: 3px; font-size: 10px; }
+    .drop-zone {
+      border: 2px dashed #555; border-radius: 8px; padding: 32px 16px;
+      text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px;
+    }
+    .drop-zone:hover, .drop-zone.dragover { border-color: #0d99ff; background: rgba(13,153,255,0.08); }
+    .drop-zone p { font-size: 13px; color: #999; }
+    .drop-zone .icon { font-size: 32px; margin-bottom: 8px; }
+    input[type="file"] { display: none; }
+    .status { font-size: 12px; color: #999; margin-top: 8px; min-height: 16px; }
+    .status.success { color: #0d99ff; }
+    .status.error { color: #f24822; }
+    .btn {
+      width: 100%; padding: 10px; border: none; border-radius: 6px;
+      background: #0d99ff; color: white; font-size: 13px; font-weight: 600;
+      cursor: pointer; margin-top: 8px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn:hover:not(:disabled) { background: #0b85e0; }
+    .progress { margin-top: 12px; }
+    .progress-bar { height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #0d99ff; width: 0%; transition: width 0.3s; }
+    .progress-text { font-size: 11px; color: #777; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h2>Proposal HTML → Figma</h2>
+  <div class="desc">
+    먼저 터미널에서 JSON 생성:<br>
+    <code>node render.js presentation.html</code><br>
+    그 후 생성된 .figma.json 파일을 아래에 드롭
+  </div>
+  <div class="drop-zone" id="dropZone">
+    <div class="icon">📄</div>
+    <p>.figma.json 파일을 드래그하거나 클릭</p>
+  </div>
+  <input type="file" id="fileInput" accept=".json" />
+  <button class="btn" id="convertBtn" disabled>Figma로 변환</button>
+  <div class="status" id="status"></div>
+  <div class="progress" style="display:none" id="progressWrap">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText"></div>
+  </div>
+  <!-- INLINE_SCRIPT -->
+</body>
+</html>
