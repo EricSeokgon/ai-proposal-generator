@@ -28,7 +28,7 @@ STEP 3 📐 기획    → [PlanningAgent] (4개 서브에이전트)
   └─ DesignPlanner (6종 테마 + 디자인)
   → 03_plan.json
 STEP 4 🎨 제작    → [ProductionAgent] + [QAAgent] → PPTX (납품용) + 04_qa_report.json
-STEP 5 🎯 디자인  → [DesignAgent] Plan JSON → Gemini → HTML → Puppeteer → JSON → Figma 플러그인
+STEP 5 🎯 디자인  → [DesignAgent] Plan JSON → Claude(Sonnet 4.6) → HTML → Puppeteer → JSON → Figma 플러그인
 ```
 
 ## 필수 규칙: PPTX 생성 스크립트
@@ -52,7 +52,7 @@ STEP 5 🎯 디자인  → [DesignAgent] Plan JSON → Gemini → HTML → Puppe
 | 3-4 | DesignPlanner | `src/agents/planning/design_planner.py` | 6종 테마 + 디자인 |
 | 4 | ProductionAgent | `src/agents/production_agent.py` | slide_kit 코드 생성 + PPTX |
 | 4 | QAAgent | `src/agents/qa_agent.py` | 겹침/폰트/컬러/플레이스홀더 검수 |
-| 5 | DesignAgent | `src/agents/design_agent.py` | Plan→Gemini→HTML→Puppeteer→JSON→Figma 플러그인 |
+| 5 | DesignAgent | `src/agents/design_agent.py` | Plan→Claude(HTML 자동 생성)→Puppeteer→JSON→Figma 플러그인 |
 | - | BriefAdapter | `src/agents/brief_adapter.py` | 브레인스토밍→제안서 연계 변환 |
 
 오케스트레이터: `src/orchestrators/pipeline_orchestrator.py`
@@ -100,7 +100,8 @@ apply_theme("soft_purple")    # 소프트 퍼플 (크리에이티브)
 
 ## 사전 준비
 - **Claude Pro 이상** + Claude Code CLI
-- **Gemini API 키** (Stage 5): `export GEMINI_API_KEY=your-key`
+- **Anthropic API 키** (전 단계 공통): `export ANTHROPIC_API_KEY=your-key`
+  - Stage 5는 기본 모델로 `claude-sonnet-4-6`를 사용 (HTML 자동 생성)
 - **Python 3.9+**: `pip install -r requirements.txt`
 - **Node.js + Puppeteer** (Stage 5 Figma 임포트): `cd figma-plugin && npm install`
 - **Figma 데스크톱 앱**: Plugins > Import plugin from manifest > `figma-plugin/manifest.json`

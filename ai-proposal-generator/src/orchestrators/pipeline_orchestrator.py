@@ -1,7 +1,7 @@
 """
 5단계 파이프라인 오케스트레이터
 
-분석 → 리서치 → 기획 → 제작(+검수) → 변환
+분석 → 리서치 → 기획 → 제작(+검수) → 디자인(Claude HTML)
 """
 
 import json
@@ -14,7 +14,7 @@ from ..agents.research_agent import ResearchAgent
 from ..agents.planning_agent import PlanningAgent
 from ..agents.production_agent import ProductionAgent
 from ..agents.qa_agent import QAAgent
-from ..agents.conversion_agent import ConversionAgent
+from ..agents.design_agent import DesignAgent
 from ..parsers.pdf_parser import PDFParser
 from ..parsers.docx_parser import DOCXParser
 from ..utils.logger import get_logger
@@ -32,19 +32,27 @@ class PipelineResult:
         self.plan = kwargs.get("plan")
         self.production = kwargs.get("production")
         self.qa_report = kwargs.get("qa_report")
-        self.conversion = kwargs.get("conversion")
+        self.design = kwargs.get("design")
         self.artifacts = kwargs.get("artifacts", {})
 
     def summary(self) -> Dict[str, Any]:
+        design_ok = None
+        html_dir = None
+        if self.design:
+            total = self.design.get("total_slides", 0)
+            generated = self.design.get("generated_html", 0)
+            design_ok = total > 0 and generated == total
+            html_dir = self.design.get("html_dir")
+
         return {
             "analysis": bool(self.analysis),
             "research": bool(self.research),
             "plan": bool(self.plan),
             "production": self.production.success if self.production else False,
             "qa_passed": self.qa_report.passed if self.qa_report else None,
-            "conversion": self.conversion.success if self.conversion else None,
+            "design": design_ok,
             "pptx_path": self.production.pptx_path if self.production else None,
-            "html_dir": self.conversion.html_output_dir if self.conversion else None,
+            "html_dir": html_dir,
             "artifacts": self.artifacts,
         }
 
@@ -52,13 +60,9 @@ class PipelineResult:
 class PipelineOrchestrator:
     """5단계 제안서 생성 파이프라인"""
 
-    STAGES = ["analysis", "research", "planning", "production", "conversion"]
+    STAGES = ["analysis", "research", "planning", "production", "design"]
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        gemini_api_key: Optional[str] = None,
-    ):
+    def __init__(self, api_key: Optional[str] = None):
         settings = get_settings()
         self.api_key = api_key or settings.anthropic_api_key
 
@@ -68,10 +72,7 @@ class PipelineOrchestrator:
         self.planning_agent = PlanningAgent(api_key=self.api_key)
         self.production_agent = ProductionAgent(api_key=self.api_key)
         self.qa_agent = QAAgent(api_key=self.api_key)
-        self.conversion_agent = ConversionAgent(
-            api_key=self.api_key,
-            gemini_api_key=gemini_api_key or os.getenv("GEMINI_API_KEY", ""),
-        )
+        self.design_agent = DesignAgent(api_key=self.api_key)
 
         # 파서
         self.pdf_parser = PDFParser()
@@ -84,6 +85,8 @@ class PipelineOrchestrator:
         company_data_path: Optional[Path] = None,
         design_reference_path: Optional[Path] = None,
         design_note: Optional[str] = None,
+        theme: str = "warm_minimal",
+        design_concurrency: int = 4,
         skip_stages: Optional[List[str]] = None,
         max_qa_retries: int = 2,
         progress_callback: Optional[Callable] = None,
@@ -97,7 +100,9 @@ class PipelineOrchestrator:
             company_data_path: 회사 정보 JSON
             design_reference_path: 디자인 레퍼런스 경로
             design_note: 디자인 노트
-            skip_stages: 건너뛸 단계 ["research", "conversion"]
+            theme: 디자인 테마 (warm_minimal/classic_blue/forest/corporate/mono_black/soft_purple)
+            design_concurrency: Stage 5에서 Claude 병렬 호출 수 (1~8)
+            skip_stages: 건너뛸 단계 ["research", "design"]
             max_qa_retries: QA 실패 시 최대 재시도 횟수
             progress_callback: 진행 상황 콜백
         """
@@ -225,27 +230,34 @@ class PipelineOrchestrator:
             f"QA {'통과' if qa_report and qa_report.passed else '미통과'}"
         )
 
-        # ━━━ Stage 5: 변환 ━━━
-        conversion = None
-        if "conversion" not in skip_stages and production.success:
+        # ━━━ Stage 5: 디자인 (Claude HTML 자동 생성) ━━━
+        design_result = None
+        if "design" not in skip_stages and production.success:
             if progress_callback:
                 progress_callback({
-                    "pipeline_stage": "conversion",
+                    "pipeline_stage": "design",
                     "pipeline_step": 5,
                     "pipeline_total": 5,
-                    "message": "Stage 5: 변환 시작",
+                    "message": "Stage 5: 디자인 HTML 생성 시작",
                 })
 
-            conversion = await self.conversion_agent.execute({
-                "pptx_path": production.pptx_path,
-                "output_dir": str(output_dir / "05_conversion"),
+            design_result = await self.design_agent.execute({
+                "plan": plan_dict,
+                "output_dir": str(output_dir / "05_design"),
                 "design_reference": str(design_reference_path) if design_reference_path else None,
                 "design_note": design_note or "",
+                "theme": theme,
+                "concurrency": design_concurrency,
             }, progress_callback)
 
-            logger.info(f"Stage 5 완료: 변환 {'성공' if conversion.success else '실패'}")
+            generated = design_result.get("generated_html", 0)
+            total = design_result.get("total_slides", 0)
+            artifacts["05_design.json"] = self._save_artifact(
+                output_dir / "05_design.json", design_result
+            )
+            logger.info(f"Stage 5 완료: HTML 생성 {generated}/{total}")
         else:
-            logger.info("Stage 5 스킵: 변환")
+            logger.info("Stage 5 스킵: 디자인")
 
         return PipelineResult(
             analysis=analysis,
@@ -253,7 +265,7 @@ class PipelineOrchestrator:
             plan=plan,
             production=production,
             qa_report=qa_report,
-            conversion=conversion,
+            design=design_result,
             artifacts=artifacts,
         )
 
