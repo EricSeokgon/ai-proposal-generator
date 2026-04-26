@@ -1,6 +1,7 @@
-# 도메인 카드 — 빅데이터 / 데이터플랫폼
+# 도메인 카드 — 빅데이터 / 데이터플랫폼 (신규 구축)
 
-> 공공입찰(나라장터) 대상 빅데이터 / 데이터플랫폼 사업 제안서 작성 시 참조.
+> 공공입찰(나라장터) **신규 빅데이터 플랫폼 구축** 사업 제안서.
+> 유지보수는 [bigdata_maintenance.md](bigdata_maintenance.md), 분석 사업은 [bigdata_analytics.md](bigdata_analytics.md), 고도화·차세대는 [bigdata_modernization.md](bigdata_modernization.md) 참조.
 > Phase 2(INSIGHT), Phase 4(ACTION PLAN), Phase 6(WHY US) 프롬프트에 자동 합류된다.
 
 ## 사업 유형 시그널 (RFP 키워드)
