@@ -2,19 +2,20 @@
 
 [![Tests](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml/badge.svg)](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml)
 [![Python](https://img.shields.io/badge/python-3.9~3.12-blue.svg)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-172%20passed-brightgreen.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-197%20passed-brightgreen.svg)](#테스트)
 
 RFP/기획안을 입력하면 PPTX 제안서(70~140장) + Figma 임포트용 고품질 HTML을 자동 생성하는 멀티 에이전트 시스템.
 
 ## 핵심 특징
 
 - **5-Stage 멀티 에이전트 파이프라인**: 분석 → 리서치 → 기획(4개 서브) → 제작+QA → 디자인(HTML)
+- **3가지 출력 포맷**: 16:9 와이드 / **A4 세로 납품본 (70~150장)** / **A4 가로 발표본 (30~50장)**
 - **공공입찰(나라장터) 특화** ⭐: 8개 도메인 자동 분기 + 평가기준·컴플라이언스 카드 자동 합류
 - **Single-LLM (Claude) 통합 구조**: Stage 5 디자인까지 모두 Claude로 일원화 (Sonnet 4.6 HTML 자동 생성)
 - **Impact-8 Framework**: 수주 성공 제안서 기반 8-Phase 구조 + Win Theme + Action Title
 - **slide_kit.py 엔진**: 30종 레이아웃 × 6종 테마 PPTX 렌더링 엔진
 - **Figma 임포트**: HTML → Puppeteer → JSON → Figma 플러그인으로 네이티브 프레임 변환
-- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 172 unit tests
+- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 197 unit tests
 
 ## 사전 준비
 
@@ -104,6 +105,7 @@ async def main():
         theme="warm_minimal",                                  # 6종 중 선택
         design_concurrency=4,                                  # Stage 5 병렬도 (1~8)
         skip_stages=[],                                        # ["research"] 또는 ["design"]
+        proposal_format="legacy_16_9",                         # 또는 "delivery_a4_portrait", "presentation_a4_landscape"
     )
     print(result.summary())
 
@@ -125,8 +127,60 @@ asyncio.run(main())
 | `MAX_RFP_TEXT_CHARS` | `25000` | RFP 분석 시 절단 임계 |
 | `MAX_TABLES_CHARS` | `5000` | 테이블 JSON 절단 임계 |
 | `DESIGN_GLOBAL_TIMEOUT_SECONDS` | `1800` | Stage 5 전체 HTML 생성 타임아웃 (초) |
+| `PROPOSAL_FORMAT` | `legacy_16_9` | 기본 출력 포맷 (`legacy_16_9` / `delivery_a4_portrait` / `presentation_a4_landscape`) |
 
 `.env` 파일 또는 셸 export 모두 지원 (python-dotenv).
+
+## 출력 포맷 (3종)
+
+동일한 RFP 입력에서 용도에 따라 3가지 PPTX 포맷으로 출력 가능합니다.
+
+| 포맷 | 사이즈 | 권장 페이지 | 용도 |
+|------|--------|-----------|------|
+| `legacy_16_9` (기본) | 13.33" × 7.5" | 70~140장 | 16:9 와이드 (PT 발표용 와이드 스크린) |
+| **`delivery_a4_portrait`** | 8.27" × 11.69" | **70~150장** | **A4 세로 납품본** (제본/PDF 정식 제안서) |
+| **`presentation_a4_landscape`** | 11.69" × 8.27" | **30~50장** | **A4 가로 발표본** (PT용 압축 요약) |
+
+### 사용법
+
+```python
+from src.orchestrators import PipelineOrchestrator
+
+orchestrator = PipelineOrchestrator()
+
+# 1) A4 세로 납품본 (정식 제안서, 70~150장)
+delivery = await orchestrator.execute(
+    rfp_path=Path("제안요청서/sample.pdf"),
+    output_dir=Path("output/납품본"),
+    proposal_format="delivery_a4_portrait",   # ← 핵심
+    theme="corporate",
+)
+
+# 2) A4 가로 발표본 (PT용 요약, 30~50장)
+presentation = await orchestrator.execute(
+    rfp_path=Path("제안요청서/sample.pdf"),
+    output_dir=Path("output/발표본"),
+    proposal_format="presentation_a4_landscape",  # ← 핵심
+    theme="classic_blue",
+)
+```
+
+또는 환경변수로:
+```bash
+export PROPOSAL_FORMAT=delivery_a4_portrait
+```
+
+### Phase 1 한계 (현재) → Phase 2 (예정)
+
+**현재(Phase 1)** PPTX 슬라이드 사이즈만 포맷별로 변경됩니다. LAYOUTS 30종의 zone 좌표는 16:9 기준으로 계산되어 있어:
+
+| 포맷 | LAYOUTS 호환성 |
+|------|--------------|
+| `legacy_16_9` | ✅ 완전 호환 |
+| `presentation_a4_landscape` (1.41 비율) | ⚠️ 16:9 (1.78) 와 비슷해 거의 정상 동작, 일부 우측 여백 발생 가능 |
+| `delivery_a4_portrait` (0.71 비율) | ❌ 가로폭이 좁아 일부 zone 이 슬라이드 경계를 넘을 수 있음 |
+
+**Phase 2 (예정)**: A4 세로용 LAYOUTS 30종 zone 좌표 + 폰트 크기 재정의.
 
 ## 공공입찰 (나라장터) 특화 ⭐
 

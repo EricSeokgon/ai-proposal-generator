@@ -89,6 +89,7 @@ class PipelineOrchestrator:
         design_concurrency: int = 4,
         skip_stages: Optional[List[str]] = None,
         max_qa_retries: int = 2,
+        proposal_format: Optional[str] = None,
         progress_callback: Optional[Callable] = None,
     ) -> PipelineResult:
         """
@@ -104,11 +105,23 @@ class PipelineOrchestrator:
             design_concurrency: Stage 5에서 Claude 병렬 호출 수 (1~8)
             skip_stages: 건너뛸 단계 ["research", "design"]
             max_qa_retries: QA 실패 시 최대 재시도 횟수
+            proposal_format: 출력 포맷 (ProposalFormat value).
+                None 시 settings.proposal_format 사용 (기본 "legacy_16_9").
+                옵션:
+                  - "legacy_16_9": 16:9 와이드 (기존)
+                  - "delivery_a4_portrait": A4 세로 납품본 (70~150장)
+                  - "presentation_a4_landscape": A4 가로 발표본 (30~50장)
             progress_callback: 진행 상황 콜백
         """
         skip_stages = skip_stages or []
         os.makedirs(output_dir, exist_ok=True)
         artifacts = {}
+
+        # 포맷 결정 (파라미터 > settings 기본값)
+        from config.settings import get_settings as _gs
+        if proposal_format is None:
+            proposal_format = _gs().proposal_format
+        logger.info(f"제안서 출력 포맷: {proposal_format}")
 
         # ━━━ Stage 1: 분석 ━━━
         if progress_callback:
@@ -178,6 +191,7 @@ class PipelineOrchestrator:
             "research": research_dict,
             "company_data": self._load_company_data(company_data_path),
             "reference_design": reference_design,
+            "proposal_format": proposal_format,
         }, progress_callback)
         plan_dict = plan.model_dump()
 
@@ -199,6 +213,7 @@ class PipelineOrchestrator:
         production = await self.production_agent.execute({
             "plan": plan_dict,
             "output_dir": str(output_dir),
+            "proposal_format": proposal_format,
         }, progress_callback)
 
         qa_report = None
@@ -217,6 +232,7 @@ class PipelineOrchestrator:
                     production = await self.production_agent.execute({
                         "plan": plan_dict,
                         "output_dir": str(output_dir),
+                        "proposal_format": proposal_format,
                         "qa_feedback": qa_report.model_dump(),
                     }, progress_callback)
 

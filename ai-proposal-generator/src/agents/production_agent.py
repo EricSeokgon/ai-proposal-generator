@@ -63,11 +63,14 @@ class ProductionAgent(BaseAgent):
                 "plan": dict (ProposalPlan),
                 "output_dir": str,
                 "qa_feedback": dict (optional, QAReport — 재생성 시),
+                "proposal_format": str (optional, ProposalFormat value) —
+                    명시 시 생성 코드에서 ``new_presentation(format=...)`` 사용 강제.
             }
         """
         plan = input_data.get("plan", {})
         output_dir = input_data.get("output_dir", "output")
         qa_feedback = input_data.get("qa_feedback")
+        proposal_format = input_data.get("proposal_format")
 
         if progress_callback:
             progress_callback({
@@ -81,7 +84,7 @@ class ProductionAgent(BaseAgent):
         slide_kit_ref = self._load_slide_kit_reference()
 
         # Step 2: Python 코드 생성
-        code = await self._generate_code(plan, slide_kit_ref, qa_feedback)
+        code = await self._generate_code(plan, slide_kit_ref, qa_feedback, proposal_format)
 
         # Step 3: 스크립트 저장
         os.makedirs(output_dir, exist_ok=True)
@@ -121,7 +124,11 @@ class ProductionAgent(BaseAgent):
         )
 
     async def _generate_code(
-        self, plan: Dict, slide_kit_ref: str, qa_feedback: Optional[Dict] = None
+        self,
+        plan: Dict,
+        slide_kit_ref: str,
+        qa_feedback: Optional[Dict] = None,
+        proposal_format: Optional[str] = None,
     ) -> str:
         """ProposalPlan → slide_kit Python 코드"""
 
@@ -134,6 +141,25 @@ class ProductionAgent(BaseAgent):
 
         # slide_kit 레퍼런스 추가
         system_prompt += f"\n\n## slide_kit API 레퍼런스\n{slide_kit_ref[:15000]}"
+
+        # 제안서 출력 포맷 가이드 추가 (명시된 경우만)
+        format_guide = ""
+        if proposal_format and proposal_format != "legacy_16_9":
+            try:
+                from config.proposal_types import get_format_spec
+                spec = get_format_spec(proposal_format)
+                format_guide = (
+                    f"\n## 출력 포맷 (필수 준수)\n"
+                    f"- 포맷: **{spec['name']}** ({proposal_format})\n"
+                    f"- 슬라이드 사이즈: {spec['width_inches']}\" × {spec['height_inches']}\"\n"
+                    f"- 권장 페이지 수: {spec['slide_count_range'][0]}~{spec['slide_count_range'][1]}장\n"
+                    f"- 용도: {spec['purpose']}\n"
+                    f"- **반드시** 코드 첫 부분에서 `new_presentation(format=\"{proposal_format}\")` 호출\n"
+                    f"  또는 `apply_format(\"{proposal_format}\")` 명시\n"
+                )
+            except Exception as e:
+                self.logger.warning(f"format_guide 구성 실패: {e}")
+        system_prompt += format_guide
 
         qa_section = ""
         if qa_feedback:
@@ -159,6 +185,7 @@ class ProductionAgent(BaseAgent):
 
 ## 필수 규칙
 1. 스크립트 상단에 반드시 PROJECT_ROOT 설정 + `from src.generators.slide_kit import *`
+{f'1-1. import 직후 `apply_format("{proposal_format}")` 또는 `new_presentation(format="{proposal_format}")` 호출 (출력 포맷 강제)' if proposal_format and proposal_format != "legacy_16_9" else ''}
 2. 모든 색상은 C["primary"] 등 상수 사용 (하드코딩 금지)
 3. 모든 폰트는 FONT 상수 사용 (Pretendard)
 4. 겹침/공백 방지 규칙 준수

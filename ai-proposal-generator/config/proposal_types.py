@@ -19,6 +19,68 @@ class ProposalType(str, Enum):
     GENERAL = "general"                # 일반
 
 
+# ════════════════════════════════════════════════════════════
+# 제안서 출력 포맷 (Phase 1: 사이즈 + 페이지 수 분기)
+# ════════════════════════════════════════════════════════════
+class ProposalFormat(str, Enum):
+    """제안서 출력 포맷.
+
+    - LEGACY_16_9: 기존 16:9 와이드 (호환성, 기본값)
+    - DELIVERY_A4_PORTRAIT: A4 세로 납품본 (제본/PDF 정식 제안서)
+    - PRESENTATION_A4_LANDSCAPE: A4 가로 발표본 (PT용 압축 요약)
+    """
+    LEGACY_16_9 = "legacy_16_9"
+    DELIVERY_A4_PORTRAIT = "delivery_a4_portrait"
+    PRESENTATION_A4_LANDSCAPE = "presentation_a4_landscape"
+
+
+# 포맷별 사이즈 + 페이지 수 + 용도 사양
+# Phase 1 한계: LAYOUTS(30종)는 16:9 zone 좌표 기준으로 계산되어 있어
+# A4 세로(DELIVERY_A4_PORTRAIT) 사용 시 일부 zone 이 슬라이드 경계를 넘을 수 있다.
+# A4 가로(PRESENTATION_A4_LANDSCAPE) 는 16:9 와 비율이 비슷해(1.41 vs 1.78) 거의 정상 동작.
+PROPOSAL_FORMAT_SPECS: Dict[ProposalFormat, Dict] = {
+    ProposalFormat.LEGACY_16_9: {
+        "name": "16:9 와이드",
+        "width_inches": 13.333,
+        "height_inches": 7.5,
+        "slide_count_range": (70, 140),
+        "purpose": "범용 16:9 슬라이드 (기본 LAYOUTS 최적)",
+        "layouts_compat": "full",
+    },
+    ProposalFormat.DELIVERY_A4_PORTRAIT: {
+        "name": "A4 세로 (납품본)",
+        "width_inches": 8.27,
+        "height_inches": 11.69,
+        "slide_count_range": (70, 150),
+        "purpose": "제본/PDF 납품용 정식 제안서",
+        "layouts_compat": "limited",  # Phase 2 에서 zone 재정의 예정
+    },
+    ProposalFormat.PRESENTATION_A4_LANDSCAPE: {
+        "name": "A4 가로 (발표본)",
+        "width_inches": 11.69,
+        "height_inches": 8.27,
+        "slide_count_range": (30, 50),
+        "purpose": "PT 발표용 압축 요약본",
+        "layouts_compat": "near_full",
+    },
+}
+
+
+def get_format_spec(proposal_format: Optional[ProposalFormat]) -> Dict:
+    """포맷 사양 반환 (None 또는 잘못된 값이면 LEGACY_16_9 폴백)"""
+    if proposal_format is None:
+        return PROPOSAL_FORMAT_SPECS[ProposalFormat.LEGACY_16_9]
+    if isinstance(proposal_format, str):
+        try:
+            proposal_format = ProposalFormat(proposal_format)
+        except ValueError:
+            return PROPOSAL_FORMAT_SPECS[ProposalFormat.LEGACY_16_9]
+    return PROPOSAL_FORMAT_SPECS.get(
+        proposal_format,
+        PROPOSAL_FORMAT_SPECS[ProposalFormat.LEGACY_16_9],
+    )
+
+
 @dataclass
 class PhaseConfig:
     """Phase 구성 설정"""

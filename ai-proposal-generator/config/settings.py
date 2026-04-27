@@ -70,6 +70,12 @@ class Settings(BaseModel):
     slide_width_inches: float = 13.33
     slide_height_inches: float = 7.5
 
+    # 제안서 출력 포맷 (Phase 1)
+    # legacy_16_9 / delivery_a4_portrait / presentation_a4_landscape
+    proposal_format: str = Field(
+        default_factory=lambda: os.getenv("PROPOSAL_FORMAT", "legacy_16_9")
+    )
+
 
 _settings: Optional[Settings] = None
 

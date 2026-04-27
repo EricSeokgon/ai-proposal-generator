@@ -91,13 +91,69 @@ C["green_light"]    = lighten(C["green"], 0.80)
 C["card_bg"]        = RGBColor(245, 242, 237)         # 카드 배경 (웜 톤)
 C["card_border"]    = RGBColor(225, 220, 212)         # 카드 테두리 (웜 톤)
 
-# 슬라이드 규격 (16:9)
+# 슬라이드 규격 (기본: 16:9 와이드)
+# apply_format() 으로 런타임 변경 가능 — 기본값은 호환성을 위해 16:9 유지
 SW = Inches(13.333)
 SH = Inches(7.5)
 ML = Inches(1.2)       # 좌측 여백 (넓은 여백 — 미니멀)
 MR = Inches(1.2)       # 우측 여백 (넓은 여백 — 미니멀)
 MT_Y = Inches(0.6)     # 상단 여백 (여유 있게)
 CW = SW - ML - MR      # 콘텐츠 너비
+
+# 포맷별 사이즈 사양 (config.proposal_types 와 동기화)
+# slide_kit 단독 사용 시(config import 없이) 폴백으로 사용
+_FORMAT_SPECS_FALLBACK = {
+    "legacy_16_9": {
+        "name": "16:9 와이드", "width_inches": 13.333, "height_inches": 7.5,
+    },
+    "delivery_a4_portrait": {
+        "name": "A4 세로 (납품본)", "width_inches": 8.27, "height_inches": 11.69,
+    },
+    "presentation_a4_landscape": {
+        "name": "A4 가로 (발표본)", "width_inches": 11.69, "height_inches": 8.27,
+    },
+}
+
+
+def _resolve_format_spec(format_name):
+    """config.proposal_types 우선, 없으면 _FORMAT_SPECS_FALLBACK 사용"""
+    if not format_name:
+        format_name = "legacy_16_9"
+    try:
+        from config.proposal_types import PROPOSAL_FORMAT_SPECS, ProposalFormat
+        try:
+            key = ProposalFormat(format_name)
+            return PROPOSAL_FORMAT_SPECS[key]
+        except (ValueError, KeyError):
+            pass
+    except ImportError:
+        pass
+    return _FORMAT_SPECS_FALLBACK.get(format_name, _FORMAT_SPECS_FALLBACK["legacy_16_9"])
+
+
+def apply_format(format_name="legacy_16_9"):
+    """슬라이드 출력 포맷 변경 — globals SW/SH/CW 갱신.
+
+    Phase 1 한계: LAYOUTS dict 의 zone 좌표는 module load 시점에
+    16:9 (13.333" × 7.5") 기준으로 평가되어 그대로 유지된다.
+    따라서:
+      - legacy_16_9: 정상 동작
+      - presentation_a4_landscape (11.69" × 8.27"): 비율 유사하므로 거의 정상 동작
+      - delivery_a4_portrait (8.27" × 11.69"): 가로폭이 좁고 세로폭이 길어
+        일부 zone 이 슬라이드 경계를 넘거나 여백이 과대해질 수 있음 (Phase 2 에서 해결 예정)
+
+    Args:
+        format_name: ProposalFormat 의 value 문자열 (legacy_16_9 / delivery_a4_portrait / presentation_a4_landscape)
+
+    Returns:
+        적용된 포맷 사양 dict (width_inches, height_inches, name, ...)
+    """
+    global SW, SH, CW
+    spec = _resolve_format_spec(format_name)
+    SW = Inches(spec["width_inches"])
+    SH = Inches(spec["height_inches"])
+    CW = SW - ML - MR
+    return spec
 
 # 타이포그래피
 FONT = "Pretendard"
@@ -129,8 +185,19 @@ SZ = {
 #  2. 프레젠테이션 / 슬라이드 생성
 # ═══════════════════════════════════════════════════════════════
 
-def new_presentation():
-    """16:9 빈 프레젠테이션 생성"""
+def new_presentation(format=None):
+    """빈 프레젠테이션 생성.
+
+    Args:
+        format: ProposalFormat value (예: "delivery_a4_portrait",
+            "presentation_a4_landscape", "legacy_16_9").
+            None 또는 미지정 시 현재 globals SW/SH 그대로 사용 (기본 16:9).
+
+    Returns:
+        프레젠테이션 객체 (prs.slide_width / slide_height 가 포맷에 맞게 설정됨)
+    """
+    if format:
+        apply_format(format)
     prs = Presentation()
     prs.slide_width = SW
     prs.slide_height = SH
@@ -2339,13 +2406,19 @@ def validate_sequence(slide_info):
 #  22. v3.5 — new_presentation 템플릿 지원
 # ═══════════════════════════════════════════════════════════════
 
-def new_presentation_from_template(template_path):
-    """기존 PPTX 템플릿 기반 프레젠테이션 생성
+def new_presentation_from_template(template_path, format=None):
+    """기존 PPTX 템플릿 기반 프레젠테이션 생성.
 
     마스터 슬라이드의 로고, 푸터, 테마 색상을 그대로 활용.
+
+    Args:
+        template_path: 템플릿 PPTX 경로
+        format: ProposalFormat value (옵션) — 명시 시 해당 포맷으로 사이즈 적용
     """
     if not os.path.exists(template_path):
         raise FileNotFoundError(f"Template not found: {template_path}")
+    if format:
+        apply_format(format)
     prs = Presentation(template_path)
     prs.slide_width = SW
     prs.slide_height = SH

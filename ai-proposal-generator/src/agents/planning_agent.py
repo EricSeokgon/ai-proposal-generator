@@ -46,11 +46,13 @@ class PlanningAgent(BaseAgent):
                 "research": dict (optional),
                 "company_data": dict (optional),
                 "reference_design": dict (optional),
+                "proposal_format": str (optional, ProposalFormat value),
             }
         """
         rfp = input_data.get("rfp_analysis", {})
         research = input_data.get("research", {})
         reference_design = input_data.get("reference_design")
+        proposal_format = input_data.get("proposal_format")
 
         if progress_callback:
             progress_callback({
@@ -62,17 +64,18 @@ class PlanningAgent(BaseAgent):
 
         # Step 1: 구조 기획 + 디자인 기획 (병렬 실행)
         # design_planner는 structure_planner 결과를 기다리지 않으므로
-        # RFP project_type 기반 추정 슬라이드 수를 임시로 전달한다.
-        # (디자인 기획은 컬러·타이포·테마 위주라 슬라이드 수에 약하게 의존)
-        estimated_slides = self._estimate_slide_count(rfp)
+        # 추정 슬라이드 수를 임시로 전달한다.
+        # 우선순위: proposal_format > RFP project_type
+        estimated_slides = self._estimate_slide_count(rfp, proposal_format)
         logger.debug(
             f"design_planner 임시 추정 슬라이드 수: {estimated_slides} "
-            f"(project_type={rfp.get('project_type')})"
+            f"(format={proposal_format}, project_type={rfp.get('project_type')})"
         )
 
         structure_task = self.structure_planner.execute({
             "rfp_analysis": rfp,
             "research": research,
+            "proposal_format": proposal_format,
         }, progress_callback)
 
         design_task = self.design_planner.execute({
@@ -144,13 +147,29 @@ class PlanningAgent(BaseAgent):
         )
 
     @staticmethod
-    def _estimate_slide_count(rfp: Dict[str, Any]) -> int:
-        """RFP project_type 기반 권장 페이지 범위의 평균 추정값.
+    def _estimate_slide_count(
+        rfp: Dict[str, Any],
+        proposal_format: Optional[str] = None,
+    ) -> int:
+        """페이지 추정값 — format 우선, RFP project_type 폴백.
 
-        StructurePlanner 결과를 기다리지 않고 DesignPlanner를 병렬 실행하기 위해
-        ``PROPOSAL_TYPE_CONFIGS[type].total_pages_range`` 의 중간값을 사용한다.
-        실패 시 ``_DEFAULT_SLIDE_ESTIMATE`` 폴백.
+        우선순위:
+        1. ``proposal_format`` 명시 시: ``PROPOSAL_FORMAT_SPECS[fmt].slide_count_range`` 평균
+           (예: delivery_a4_portrait → (70+150)//2 = 110, presentation_a4_landscape → (30+50)//2 = 40)
+        2. format 미지정 시: ``PROPOSAL_TYPE_CONFIGS[type].total_pages_range`` 평균 (기존 로직)
+        3. 모두 실패: ``_DEFAULT_SLIDE_ESTIMATE`` (70)
         """
+        # 1) Format 우선 처리
+        if proposal_format:
+            try:
+                from config.proposal_types import get_format_spec
+                spec = get_format_spec(proposal_format)
+                lo, hi = spec["slide_count_range"]
+                return max(1, (lo + hi) // 2)
+            except Exception as e:
+                logger.warning(f"format 기반 슬라이드 추정 실패: {e} — project_type 폴백")
+
+        # 2) RFP project_type 폴백
         try:
             from config.proposal_types import ProposalType, get_config
             raw_type = (rfp.get("project_type") or "general").strip().lower()
