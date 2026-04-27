@@ -197,6 +197,87 @@ class TestNewPresentationFormat:
         slide_kit.apply_format("legacy_16_9")
 
 
+class TestPhase2LayoutsBuilder:
+    """Phase 2 — LAYOUTS 30종이 모든 포맷에서 슬라이드 경계 내."""
+
+    @pytest.mark.parametrize(
+        "format_name, expected_w, expected_h",
+        [
+            ("legacy_16_9", 13.333, 7.5),
+            ("delivery_a4_portrait", 8.27, 11.69),
+            ("presentation_a4_landscape", 11.69, 8.27),
+        ],
+    )
+    def test_all_zones_within_bounds(self, format_name, expected_w, expected_h):
+        from src.generators import slide_kit
+        slide_kit.apply_format(format_name)
+        layouts = slide_kit.LAYOUTS
+
+        out_of_bounds = []
+        for name, layout in layouts.items():
+            for zone in layout["zones"]:
+                x, y, w, h = zone["x"], zone["y"], zone["w"], zone["h"]
+                if (
+                    x < -0.01
+                    or y < -0.01
+                    or x + w > expected_w + 0.01
+                    or y + h > expected_h + 0.01
+                ):
+                    out_of_bounds.append(
+                        f"{name}.{zone['id']}: x+w={x + w:.2f}, y+h={y + h:.2f}"
+                    )
+
+        # 16:9 복원
+        slide_kit.apply_format("legacy_16_9")
+
+        assert not out_of_bounds, (
+            f"{format_name}: {len(out_of_bounds)} zone(s) 경계 초과:\n"
+            + "\n".join(out_of_bounds[:10])
+        )
+
+    def test_layouts_count_30_after_format_change(self):
+        from src.generators import slide_kit
+        for fmt in ["legacy_16_9", "delivery_a4_portrait", "presentation_a4_landscape"]:
+            slide_kit.apply_format(fmt)
+            assert len(slide_kit.LAYOUTS) == 30, f"{fmt}: LAYOUTS 30종 아님"
+        slide_kit.apply_format("legacy_16_9")
+
+    def test_per_format_margins(self):
+        from src.generators import slide_kit
+        from pptx.util import Inches
+
+        slide_kit.apply_format("legacy_16_9")
+        assert slide_kit.ML == Inches(1.2)
+
+        slide_kit.apply_format("delivery_a4_portrait")
+        assert slide_kit.ML == Inches(0.6)  # 좁은 슬라이드 → 여백 축소
+
+        slide_kit.apply_format("presentation_a4_landscape")
+        assert slide_kit.ML == Inches(0.9)
+
+        slide_kit.apply_format("legacy_16_9")  # 복원
+
+    def test_zone_z_scales_with_height(self):
+        from src.generators import slide_kit
+        slide_kit.apply_format("delivery_a4_portrait")
+        # 11.69 / 7.5 = 1.5587x — Z 의 모든 값이 비례 증가
+        assert slide_kit.Z["ct_y"] > 1.1  # 16:9 의 1.1 보다 큼
+        assert slide_kit.Z["ct_h"] > 5.4
+        slide_kit.apply_format("legacy_16_9")
+        # 16:9 복원 시 원래 값
+        assert abs(slide_kit.Z["ct_y"] - 1.1) < 0.01
+
+    def test_split_dark_light_no_absolute_coords(self):
+        """SPLIT_DARK_LIGHT 가 절대값(1.0/5.0/7.5) 대신 비율 기반."""
+        from src.generators import slide_kit
+        slide_kit.apply_format("delivery_a4_portrait")
+        sdl = slide_kit.LAYOUTS["SPLIT_DARK_LIGHT"]
+        # A4 세로(8.27") 에서 zone 들이 경계 내
+        for zone in sdl["zones"]:
+            assert zone["x"] + zone["w"] <= 8.27 + 0.01, f"SPLIT_DARK_LIGHT.{zone['id']} 경계 초과"
+        slide_kit.apply_format("legacy_16_9")
+
+
 class TestSettingsProposalFormat:
     """settings.proposal_format — 환경변수 동적 평가."""
 

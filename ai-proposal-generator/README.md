@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml/badge.svg)](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml)
 [![Python](https://img.shields.io/badge/python-3.9~3.12-blue.svg)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-197%20passed-brightgreen.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-204%20passed-brightgreen.svg)](#테스트)
 
 RFP/기획안을 입력하면 PPTX 제안서(70~140장) + Figma 임포트용 고품질 HTML을 자동 생성하는 멀티 에이전트 시스템.
 
@@ -15,7 +15,7 @@ RFP/기획안을 입력하면 PPTX 제안서(70~140장) + Figma 임포트용 고
 - **Impact-8 Framework**: 수주 성공 제안서 기반 8-Phase 구조 + Win Theme + Action Title
 - **slide_kit.py 엔진**: 30종 레이아웃 × 6종 테마 PPTX 렌더링 엔진
 - **Figma 임포트**: HTML → Puppeteer → JSON → Figma 플러그인으로 네이티브 프레임 변환
-- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 197 unit tests
+- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 204 unit tests
 
 ## 사전 준비
 
@@ -170,17 +170,19 @@ presentation = await orchestrator.execute(
 export PROPOSAL_FORMAT=delivery_a4_portrait
 ```
 
-### Phase 1 한계 (현재) → Phase 2 (예정)
+### Phase 2 — LAYOUTS 동적 재계산 ✅ 완료
 
-**현재(Phase 1)** PPTX 슬라이드 사이즈만 포맷별로 변경됩니다. LAYOUTS 30종의 zone 좌표는 16:9 기준으로 계산되어 있어:
+`apply_format()` 호출 시 `_build_layouts(sw, sh, ml, mr)` 빌더가 **30종 zone 좌표를 동적으로 재계산**합니다. 모든 포맷에서 슬라이드 경계 내에 정확히 들어갑니다.
 
-| 포맷 | LAYOUTS 호환성 |
-|------|--------------|
-| `legacy_16_9` | ✅ 완전 호환 |
-| `presentation_a4_landscape` (1.41 비율) | ⚠️ 16:9 (1.78) 와 비슷해 거의 정상 동작, 일부 우측 여백 발생 가능 |
-| `delivery_a4_portrait` (0.71 비율) | ❌ 가로폭이 좁아 일부 zone 이 슬라이드 경계를 넘을 수 있음 |
+| 포맷 | 사이즈 | 여백 | LAYOUTS zone 검증 |
+|------|--------|------|-------------------|
+| `legacy_16_9` | 13.33" × 7.5" | 1.2" | ✅ 30/30 zone 경계 내 |
+| `presentation_a4_landscape` | 11.69" × 8.27" | 0.9" | ✅ 30/30 zone 경계 내 |
+| `delivery_a4_portrait` | 8.27" × 11.69" | 0.6" | ✅ 30/30 zone 경계 내 |
 
-**Phase 2 (예정)**: A4 세로용 LAYOUTS 30종 zone 좌표 + 폰트 크기 재정의.
+검증 방식: `tests/test_proposal_format.py::TestPhase2LayoutsBuilder` 가 90개 zone(3 포맷 × 30 layout) 모두 슬라이드 경계 내인지 자동 확인.
+
+**한 가지 권고**: A4 세로(`delivery_a4_portrait`)는 가로폭이 좁아 좌우 분할 layouts(TWO_COL/COMPARE_LR)는 글자가 작아질 수 있음. 세로 친화 layout(FULL_BODY/HIGHLIGHT_BODY/AGENDA_LIST/NUMBERED_STEPS/TIMELINE_DESC) 권장.
 
 ## 공공입찰 (나라장터) 특화 ⭐
 

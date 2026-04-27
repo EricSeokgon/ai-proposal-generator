@@ -132,27 +132,49 @@ def _resolve_format_spec(format_name):
 
 
 def apply_format(format_name="legacy_16_9"):
-    """슬라이드 출력 포맷 변경 — globals SW/SH/CW 갱신.
+    """슬라이드 출력 포맷 변경 — globals SW/SH/ML/MR/CW + Z + LAYOUTS 모두 갱신.
 
-    Phase 1 한계: LAYOUTS dict 의 zone 좌표는 module load 시점에
-    16:9 (13.333" × 7.5") 기준으로 평가되어 그대로 유지된다.
-    따라서:
-      - legacy_16_9: 정상 동작
-      - presentation_a4_landscape (11.69" × 8.27"): 비율 유사하므로 거의 정상 동작
-      - delivery_a4_portrait (8.27" × 11.69"): 가로폭이 좁고 세로폭이 길어
-        일부 zone 이 슬라이드 경계를 넘거나 여백이 과대해질 수 있음 (Phase 2 에서 해결 예정)
+    Phase 2 (현재): LAYOUTS 30종 zone 좌표를 ``_build_layouts()`` 빌더로
+    동적 재계산하여 어떤 포맷에서도 슬라이드 경계 내에 정확히 들어간다.
+
+    포맷별 여백 차별화:
+      - legacy_16_9: ML/MR = 1.2" (와이드 슬라이드 미니멀 여백)
+      - presentation_a4_landscape: ML/MR = 0.9" (적당한 여백)
+      - delivery_a4_portrait: ML/MR = 0.6" (좁은 가로폭이라 여백 축소)
 
     Args:
-        format_name: ProposalFormat 의 value 문자열 (legacy_16_9 / delivery_a4_portrait / presentation_a4_landscape)
+        format_name: ProposalFormat value
+            (legacy_16_9 / delivery_a4_portrait / presentation_a4_landscape)
 
     Returns:
-        적용된 포맷 사양 dict (width_inches, height_inches, name, ...)
+        적용된 포맷 사양 dict
     """
-    global SW, SH, CW
+    global SW, SH, ML, MR, CW, CW_IN, ML_IN, Z, LAYOUTS
+
     spec = _resolve_format_spec(format_name)
-    SW = Inches(spec["width_inches"])
-    SH = Inches(spec["height_inches"])
+    sw_in = spec["width_inches"]
+    sh_in = spec["height_inches"]
+
+    # 포맷별 여백 (좁은 슬라이드는 여백 축소)
+    margin_map = {
+        "legacy_16_9": 1.2,
+        "presentation_a4_landscape": 0.9,
+        "delivery_a4_portrait": 0.6,
+    }
+    margin = margin_map.get(format_name, 1.2)
+
+    SW = Inches(sw_in)
+    SH = Inches(sh_in)
+    ML = Inches(margin)
+    MR = Inches(margin)
     CW = SW - ML - MR
+    ML_IN = margin
+    CW_IN = sw_in - margin * 2
+
+    # Zone + LAYOUTS 동적 재빌드
+    Z = _build_zones(sh_in)
+    LAYOUTS = _build_layouts(sw_in, sh_in, margin, margin)
+
     return spec
 
 # 타이포그래피
@@ -1065,25 +1087,34 @@ def save_pptx(prs, output_path):
 # ═══════════════════════════════════════════════════════════════
 
 # 표준 영역 (TB 타이틀바 포함 기준)
-Z = {
-    "tb_y":  0,        # 타이틀바 시작
-    "tb_h":  0.88,     # 타이틀바 높이 (TB 함수 기준)
-    "ct_y":  1.1,      # 콘텐츠 시작
-    "ct_h":  5.4,      # 콘텐츠 높이
-    "ct_b":  6.5,      # 콘텐츠 하단
-    "ft_y":  6.7,      # 푸터 시작
-    "ft_h":  0.8,      # 푸터 높이
-}
+def _build_zones(sh_in: float) -> dict:
+    """슬라이드 높이(인치) 기준 비율로 zone 영역 빌드.
+
+    16:9 (7.5") 기준 원본 비율을 유지하면서 새 사이즈에 맞게 스케일링.
+    """
+    return {
+        "tb_y":  0,                       # 타이틀바 시작
+        "tb_h":  sh_in * (0.88 / 7.5),    # 타이틀바 높이
+        "ct_y":  sh_in * (1.1 / 7.5),     # 콘텐츠 시작
+        "ct_h":  sh_in * (5.4 / 7.5),     # 콘텐츠 높이
+        "ct_b":  sh_in * (6.5 / 7.5),     # 콘텐츠 하단
+        "ft_y":  sh_in * (6.7 / 7.5),     # 푸터 시작
+        "ft_h":  sh_in * (0.8 / 7.5),     # 푸터 높이
+    }
+
+
+# 기본 16:9 기준 zone (apply_format 으로 교체 가능)
+Z = _build_zones(7.5)
 
 # 안전 간격
 GAP = 0.2    # 요소 간 수직 간격
 CGAP = 0.15  # 컬럼 간 수평 간격
-CW_IN = float(CW / 914400)   # CW in inches
-ML_IN = float(ML / 914400)   # ML in inches
+CW_IN = float(CW / 914400)   # CW in inches (apply_format 으로 갱신)
+ML_IN = float(ML / 914400)   # ML in inches (apply_format 으로 갱신)
 
 
 def _cols(n, gap=CGAP):
-    """N등분 컬럼 너비 계산 (inches)"""
+    """N등분 컬럼 너비 계산 (inches) — module-level CW_IN 참조."""
     return (CW_IN - gap * (n - 1)) / n
 
 
@@ -1098,15 +1129,32 @@ def _cols(n, gap=CGAP):
   - x, y, w, h 는 모두 인치(inches) 단위
   - role: "header"|"body"|"image"|"table"|"card"|"kpi"|"footer"
 - 모든 위치는 TB() 이후 콘텐츠 영역 기준으로 사전 계산됨
+
+Phase 2: LAYOUTS 가 ``_build_layouts(sw_in, sh_in, ml_in, mr_in)`` 빌더 함수로
+추출되어 ``apply_format()`` 호출 시 동적 재계산된다.
 """
 
-LAYOUTS = {
+
+def _build_layouts(sw_in: float, sh_in: float, ml_in: float, mr_in: float,
+                   gap: float = 0.2, cgap: float = 0.15) -> dict:
+    """주어진 슬라이드 사이즈/여백에 맞는 LAYOUTS 30종 dict 빌드.
+
+    이 함수는 모든 zone 좌표를 매개변수 기반으로 계산하여 16:9 / A4 세로 / A4 가로
+    어떤 사이즈에서도 슬라이드 경계 내에 zone 이 정확히 들어가도록 한다.
+    """
+    cw_in = sw_in - ml_in - mr_in
+    z = _build_zones(sh_in)
+
+    def _cols_local(n, gap_=cgap):
+        return (cw_in - gap_ * (n - 1)) / n
+
+    return {
 
     # ── 1. 풀바디 ────────────────────────────────────────────────
     "FULL_BODY": {
         "desc": "타이틀 + 전체 너비 본문 텍스트",
         "zones": [
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN, "h": Z["ct_h"], "role": "body"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"], "w": cw_in, "h": z["ct_h"], "role": "body"},
         ],
     },
 
@@ -1114,8 +1162,8 @@ LAYOUTS = {
     "HIGHLIGHT_BODY": {
         "desc": "강조 메시지 + 본문",
         "zones": [
-            {"id": "highlight", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN, "h": 0.8, "role": "header"},
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"] + 1.0, "w": CW_IN, "h": Z["ct_h"] - 1.0, "role": "body"},
+            {"id": "highlight", "x": ml_in, "y": z["ct_y"], "w": cw_in, "h": 0.8, "role": "header"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"] + 1.0, "w": cw_in, "h": z["ct_h"] - 1.0, "role": "body"},
         ],
     },
 
@@ -1123,10 +1171,10 @@ LAYOUTS = {
     "TWO_COL": {
         "desc": "타이틀 + 좌우 2단 레이아웃",
         "zones": [
-            {"id": "left",  "x": ML_IN, "y": Z["ct_y"],
-             "w": _cols(2), "h": Z["ct_h"], "role": "body"},
-            {"id": "right", "x": ML_IN + _cols(2) + CGAP, "y": Z["ct_y"],
-             "w": _cols(2), "h": Z["ct_h"], "role": "body"},
+            {"id": "left",  "x": ml_in, "y": z["ct_y"],
+             "w": _cols_local(2), "h": z["ct_h"], "role": "body"},
+            {"id": "right", "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"],
+             "w": _cols_local(2), "h": z["ct_h"], "role": "body"},
         ],
     },
 
@@ -1134,12 +1182,12 @@ LAYOUTS = {
     "THREE_COL": {
         "desc": "타이틀 + 3단 비교 레이아웃",
         "zones": [
-            {"id": "col1", "x": ML_IN, "y": Z["ct_y"],
-             "w": _cols(3), "h": Z["ct_h"], "role": "body"},
-            {"id": "col2", "x": ML_IN + (_cols(3) + CGAP), "y": Z["ct_y"],
-             "w": _cols(3), "h": Z["ct_h"], "role": "body"},
-            {"id": "col3", "x": ML_IN + (_cols(3) + CGAP) * 2, "y": Z["ct_y"],
-             "w": _cols(3), "h": Z["ct_h"], "role": "body"},
+            {"id": "col1", "x": ml_in, "y": z["ct_y"],
+             "w": _cols_local(3), "h": z["ct_h"], "role": "body"},
+            {"id": "col2", "x": ml_in + (_cols_local(3) + cgap), "y": z["ct_y"],
+             "w": _cols_local(3), "h": z["ct_h"], "role": "body"},
+            {"id": "col3", "x": ml_in + (_cols_local(3) + cgap) * 2, "y": z["ct_y"],
+             "w": _cols_local(3), "h": z["ct_h"], "role": "body"},
         ],
     },
 
@@ -1148,8 +1196,8 @@ LAYOUTS = {
         "desc": "타이틀 + 4단 카드 레이아웃",
         "zones": [
             {"id": f"col{i+1}",
-             "x": ML_IN + (_cols(4) + CGAP) * i, "y": Z["ct_y"],
-             "w": _cols(4), "h": Z["ct_h"], "role": "card"}
+             "x": ml_in + (_cols_local(4) + cgap) * i, "y": z["ct_y"],
+             "w": _cols_local(4), "h": z["ct_h"], "role": "card"}
             for i in range(4)
         ],
     },
@@ -1158,16 +1206,16 @@ LAYOUTS = {
     "COMPARE_LR": {
         "desc": "좌우 비교 (Before/After)",
         "zones": [
-            {"id": "left_header",  "x": ML_IN, "y": Z["ct_y"],
-             "w": (CW_IN - 0.6) / 2, "h": 0.5, "role": "header"},
-            {"id": "left_body",    "x": ML_IN, "y": Z["ct_y"] + 0.5,
-             "w": (CW_IN - 0.6) / 2, "h": Z["ct_h"] - 0.5, "role": "body"},
-            {"id": "arrow",        "x": ML_IN + (CW_IN - 0.6) / 2, "y": Z["ct_y"],
-             "w": 0.6, "h": Z["ct_h"], "role": "body"},
-            {"id": "right_header", "x": ML_IN + (CW_IN - 0.6) / 2 + 0.6, "y": Z["ct_y"],
-             "w": (CW_IN - 0.6) / 2, "h": 0.5, "role": "header"},
-            {"id": "right_body",   "x": ML_IN + (CW_IN - 0.6) / 2 + 0.6, "y": Z["ct_y"] + 0.5,
-             "w": (CW_IN - 0.6) / 2, "h": Z["ct_h"] - 0.5, "role": "body"},
+            {"id": "left_header",  "x": ml_in, "y": z["ct_y"],
+             "w": (cw_in - 0.6) / 2, "h": 0.5, "role": "header"},
+            {"id": "left_body",    "x": ml_in, "y": z["ct_y"] + 0.5,
+             "w": (cw_in - 0.6) / 2, "h": z["ct_h"] - 0.5, "role": "body"},
+            {"id": "arrow",        "x": ml_in + (cw_in - 0.6) / 2, "y": z["ct_y"],
+             "w": 0.6, "h": z["ct_h"], "role": "body"},
+            {"id": "right_header", "x": ml_in + (cw_in - 0.6) / 2 + 0.6, "y": z["ct_y"],
+             "w": (cw_in - 0.6) / 2, "h": 0.5, "role": "header"},
+            {"id": "right_body",   "x": ml_in + (cw_in - 0.6) / 2 + 0.6, "y": z["ct_y"] + 0.5,
+             "w": (cw_in - 0.6) / 2, "h": z["ct_h"] - 0.5, "role": "body"},
         ],
     },
 
@@ -1175,13 +1223,13 @@ LAYOUTS = {
     "HIGHLIGHT_THREE_CARD": {
         "desc": "강조 메시지 + 3단 카드",
         "zones": [
-            {"id": "highlight", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN, "h": 0.8, "role": "header"},
-            {"id": "card1", "x": ML_IN, "y": Z["ct_y"] + 1.1,
-             "w": _cols(3), "h": Z["ct_h"] - 1.1, "role": "card"},
-            {"id": "card2", "x": ML_IN + (_cols(3) + CGAP), "y": Z["ct_y"] + 1.1,
-             "w": _cols(3), "h": Z["ct_h"] - 1.1, "role": "card"},
-            {"id": "card3", "x": ML_IN + (_cols(3) + CGAP) * 2, "y": Z["ct_y"] + 1.1,
-             "w": _cols(3), "h": Z["ct_h"] - 1.1, "role": "card"},
+            {"id": "highlight", "x": ml_in, "y": z["ct_y"], "w": cw_in, "h": 0.8, "role": "header"},
+            {"id": "card1", "x": ml_in, "y": z["ct_y"] + 1.1,
+             "w": _cols_local(3), "h": z["ct_h"] - 1.1, "role": "card"},
+            {"id": "card2", "x": ml_in + (_cols_local(3) + cgap), "y": z["ct_y"] + 1.1,
+             "w": _cols_local(3), "h": z["ct_h"] - 1.1, "role": "card"},
+            {"id": "card3", "x": ml_in + (_cols_local(3) + cgap) * 2, "y": z["ct_y"] + 1.1,
+             "w": _cols_local(3), "h": z["ct_h"] - 1.1, "role": "card"},
         ],
     },
 
@@ -1189,10 +1237,10 @@ LAYOUTS = {
     "KPI_GRID": {
         "desc": "타이틀 + KPI 카드 + 산출근거",
         "zones": [
-            {"id": "kpi_row", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 2.0, "role": "kpi"},
-            {"id": "detail", "x": ML_IN, "y": Z["ct_y"] + 2.3,
-             "w": CW_IN, "h": Z["ct_h"] - 2.3, "role": "body"},
+            {"id": "kpi_row", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 2.0, "role": "kpi"},
+            {"id": "detail", "x": ml_in, "y": z["ct_y"] + 2.3,
+             "w": cw_in, "h": z["ct_h"] - 2.3, "role": "body"},
         ],
     },
 
@@ -1200,12 +1248,12 @@ LAYOUTS = {
     "PROCESS_DESC": {
         "desc": "프로세스 플로우 + 하단 상세 설명",
         "zones": [
-            {"id": "flow", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 1.2, "role": "header"},
-            {"id": "flow_desc", "x": ML_IN, "y": Z["ct_y"] + 1.4,
-             "w": CW_IN, "h": 0.8, "role": "body"},
-            {"id": "detail", "x": ML_IN, "y": Z["ct_y"] + 2.4,
-             "w": CW_IN, "h": Z["ct_h"] - 2.4, "role": "body"},
+            {"id": "flow", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 1.2, "role": "header"},
+            {"id": "flow_desc", "x": ml_in, "y": z["ct_y"] + 1.4,
+             "w": cw_in, "h": 0.8, "role": "body"},
+            {"id": "detail", "x": ml_in, "y": z["ct_y"] + 2.4,
+             "w": cw_in, "h": z["ct_h"] - 2.4, "role": "body"},
         ],
     },
 
@@ -1213,10 +1261,10 @@ LAYOUTS = {
     "TIMELINE_DESC": {
         "desc": "타임라인 + 하단 본문",
         "zones": [
-            {"id": "timeline", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 2.2, "role": "header"},
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"] + 2.5,
-             "w": CW_IN, "h": Z["ct_h"] - 2.5, "role": "body"},
+            {"id": "timeline", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 2.2, "role": "header"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"] + 2.5,
+             "w": cw_in, "h": z["ct_h"] - 2.5, "role": "body"},
         ],
     },
 
@@ -1224,10 +1272,10 @@ LAYOUTS = {
     "PYRAMID_DESC": {
         "desc": "좌측 피라미드 + 우측 설명",
         "zones": [
-            {"id": "pyramid", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN * 0.45, "h": Z["ct_h"], "role": "body"},
-            {"id": "desc", "x": ML_IN + CW_IN * 0.5, "y": Z["ct_y"],
-             "w": CW_IN * 0.5, "h": Z["ct_h"], "role": "body"},
+            {"id": "pyramid", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in * 0.45, "h": z["ct_h"], "role": "body"},
+            {"id": "desc", "x": ml_in + cw_in * 0.5, "y": z["ct_y"],
+             "w": cw_in * 0.5, "h": z["ct_h"], "role": "body"},
         ],
     },
 
@@ -1235,10 +1283,10 @@ LAYOUTS = {
     "MATRIX_DESC": {
         "desc": "매트릭스 + 하단 시사점",
         "zones": [
-            {"id": "matrix", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 4.0, "role": "body"},
-            {"id": "insight", "x": ML_IN, "y": Z["ct_y"] + 4.2,
-             "w": CW_IN, "h": Z["ct_h"] - 4.2, "role": "body"},
+            {"id": "matrix", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 4.0, "role": "body"},
+            {"id": "insight", "x": ml_in, "y": z["ct_y"] + 4.2,
+             "w": cw_in, "h": z["ct_h"] - 4.2, "role": "body"},
         ],
     },
 
@@ -1246,10 +1294,10 @@ LAYOUTS = {
     "STAT_ROW": {
         "desc": "숫자 4~5개 가로 통계 바 + 하단 설명",
         "zones": [
-            {"id": "stats", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 2.0, "role": "kpi"},
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"] + 2.3,
-             "w": CW_IN, "h": Z["ct_h"] - 2.3, "role": "body"},
+            {"id": "stats", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 2.0, "role": "kpi"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"] + 2.3,
+             "w": cw_in, "h": z["ct_h"] - 2.3, "role": "body"},
         ],
     },
 
@@ -1257,12 +1305,12 @@ LAYOUTS = {
     "KEY_VISUAL": {
         "desc": "좌측 대형 이미지 + 우측 텍스트",
         "zones": [
-            {"id": "image", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN * 0.45, "h": Z["ct_h"], "role": "image"},
-            {"id": "title", "x": ML_IN + CW_IN * 0.5, "y": Z["ct_y"],
-             "w": CW_IN * 0.5, "h": 0.6, "role": "header"},
-            {"id": "body",  "x": ML_IN + CW_IN * 0.5, "y": Z["ct_y"] + 0.8,
-             "w": CW_IN * 0.5, "h": Z["ct_h"] - 0.8, "role": "body"},
+            {"id": "image", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in * 0.45, "h": z["ct_h"], "role": "image"},
+            {"id": "title", "x": ml_in + cw_in * 0.5, "y": z["ct_y"],
+             "w": cw_in * 0.5, "h": 0.6, "role": "header"},
+            {"id": "body",  "x": ml_in + cw_in * 0.5, "y": z["ct_y"] + 0.8,
+             "w": cw_in * 0.5, "h": z["ct_h"] - 0.8, "role": "body"},
         ],
     },
 
@@ -1270,10 +1318,10 @@ LAYOUTS = {
     "TABLE_INSIGHT": {
         "desc": "데이터 테이블 + 하단 인사이트 박스",
         "zones": [
-            {"id": "table", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": 3.5, "role": "table"},
-            {"id": "insight", "x": ML_IN, "y": Z["ct_y"] + 3.8,
-             "w": CW_IN, "h": Z["ct_h"] - 3.8, "role": "body"},
+            {"id": "table", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": 3.5, "role": "table"},
+            {"id": "insight", "x": ml_in, "y": z["ct_y"] + 3.8,
+             "w": cw_in, "h": z["ct_h"] - 3.8, "role": "body"},
         ],
     },
 
@@ -1281,12 +1329,12 @@ LAYOUTS = {
     "LEFT_TEXT_RIGHT_IMG": {
         "desc": "좌측 텍스트 블록 + 우측 대형 이미지",
         "zones": [
-            {"id": "title", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN * 0.5, "h": 0.6, "role": "header"},
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"] + 0.8,
-             "w": CW_IN * 0.45, "h": Z["ct_h"] - 0.8, "role": "body"},
-            {"id": "image", "x": ML_IN + CW_IN * 0.5, "y": Z["ct_y"],
-             "w": CW_IN * 0.5, "h": Z["ct_h"], "role": "image"},
+            {"id": "title", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in * 0.5, "h": 0.6, "role": "header"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"] + 0.8,
+             "w": cw_in * 0.45, "h": z["ct_h"] - 0.8, "role": "body"},
+            {"id": "image", "x": ml_in + cw_in * 0.5, "y": z["ct_y"],
+             "w": cw_in * 0.5, "h": z["ct_h"], "role": "image"},
         ],
     },
 
@@ -1294,10 +1342,10 @@ LAYOUTS = {
     "TOP_IMG_BOTTOM_TEXT": {
         "desc": "상단 가로 이미지 + 하단 텍스트 영역",
         "zones": [
-            {"id": "image", "x": ML_IN, "y": Z["ct_y"],
-             "w": CW_IN, "h": Z["ct_h"] * 0.5, "role": "image"},
-            {"id": "body", "x": ML_IN, "y": Z["ct_y"] + Z["ct_h"] * 0.55,
-             "w": CW_IN, "h": Z["ct_h"] * 0.45, "role": "body"},
+            {"id": "image", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": z["ct_h"] * 0.5, "role": "image"},
+            {"id": "body", "x": ml_in, "y": z["ct_y"] + z["ct_h"] * 0.55,
+             "w": cw_in, "h": z["ct_h"] * 0.45, "role": "body"},
         ],
     },
 
@@ -1305,18 +1353,18 @@ LAYOUTS = {
     "ORG_CHART": {
         "desc": "PM + 감독 + 팀 3단 계층",
         "zones": [
-            {"id": "pm", "x": ML_IN + CW_IN * 0.35, "y": Z["ct_y"],
-             "w": CW_IN * 0.3, "h": 1.2, "role": "card"},
-            {"id": "dir1", "x": ML_IN, "y": Z["ct_y"] + 1.6,
-             "w": _cols(4), "h": 1.2, "role": "card"},
-            {"id": "dir2", "x": ML_IN + (_cols(4) + CGAP), "y": Z["ct_y"] + 1.6,
-             "w": _cols(4), "h": 1.2, "role": "card"},
-            {"id": "dir3", "x": ML_IN + (_cols(4) + CGAP) * 2, "y": Z["ct_y"] + 1.6,
-             "w": _cols(4), "h": 1.2, "role": "card"},
-            {"id": "dir4", "x": ML_IN + (_cols(4) + CGAP) * 3, "y": Z["ct_y"] + 1.6,
-             "w": _cols(4), "h": 1.2, "role": "card"},
-            {"id": "team_row", "x": ML_IN, "y": Z["ct_y"] + 3.2,
-             "w": CW_IN, "h": Z["ct_h"] - 3.2, "role": "body"},
+            {"id": "pm", "x": ml_in + cw_in * 0.35, "y": z["ct_y"],
+             "w": cw_in * 0.3, "h": 1.2, "role": "card"},
+            {"id": "dir1", "x": ml_in, "y": z["ct_y"] + 1.6,
+             "w": _cols_local(4), "h": 1.2, "role": "card"},
+            {"id": "dir2", "x": ml_in + (_cols_local(4) + cgap), "y": z["ct_y"] + 1.6,
+             "w": _cols_local(4), "h": 1.2, "role": "card"},
+            {"id": "dir3", "x": ml_in + (_cols_local(4) + cgap) * 2, "y": z["ct_y"] + 1.6,
+             "w": _cols_local(4), "h": 1.2, "role": "card"},
+            {"id": "dir4", "x": ml_in + (_cols_local(4) + cgap) * 3, "y": z["ct_y"] + 1.6,
+             "w": _cols_local(4), "h": 1.2, "role": "card"},
+            {"id": "team_row", "x": ml_in, "y": z["ct_y"] + 3.2,
+             "w": cw_in, "h": z["ct_h"] - 3.2, "role": "body"},
         ],
     },
 
@@ -1324,18 +1372,18 @@ LAYOUTS = {
     "RISK_CARD": {
         "desc": "좌우 리스크 + 3단 대응 방안",
         "zones": [
-            {"id": "risk1_title", "x": ML_IN, "y": Z["ct_y"],
-             "w": _cols(2), "h": 0.5, "role": "header"},
-            {"id": "risk1_body",  "x": ML_IN, "y": Z["ct_y"] + 0.6,
-             "w": _cols(2), "h": 2.0, "role": "body"},
-            {"id": "risk1_resp",  "x": ML_IN, "y": Z["ct_y"] + 2.8,
-             "w": _cols(2), "h": Z["ct_h"] - 2.8, "role": "body"},
-            {"id": "risk2_title", "x": ML_IN + _cols(2) + CGAP, "y": Z["ct_y"],
-             "w": _cols(2), "h": 0.5, "role": "header"},
-            {"id": "risk2_body",  "x": ML_IN + _cols(2) + CGAP, "y": Z["ct_y"] + 0.6,
-             "w": _cols(2), "h": 2.0, "role": "body"},
-            {"id": "risk2_resp",  "x": ML_IN + _cols(2) + CGAP, "y": Z["ct_y"] + 2.8,
-             "w": _cols(2), "h": Z["ct_h"] - 2.8, "role": "body"},
+            {"id": "risk1_title", "x": ml_in, "y": z["ct_y"],
+             "w": _cols_local(2), "h": 0.5, "role": "header"},
+            {"id": "risk1_body",  "x": ml_in, "y": z["ct_y"] + 0.6,
+             "w": _cols_local(2), "h": 2.0, "role": "body"},
+            {"id": "risk1_resp",  "x": ml_in, "y": z["ct_y"] + 2.8,
+             "w": _cols_local(2), "h": z["ct_h"] - 2.8, "role": "body"},
+            {"id": "risk2_title", "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"],
+             "w": _cols_local(2), "h": 0.5, "role": "header"},
+            {"id": "risk2_body",  "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"] + 0.6,
+             "w": _cols_local(2), "h": 2.0, "role": "body"},
+            {"id": "risk2_resp",  "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"] + 2.8,
+             "w": _cols_local(2), "h": z["ct_h"] - 2.8, "role": "body"},
         ],
     },
 
@@ -1343,10 +1391,10 @@ LAYOUTS = {
     "GANTT": {
         "desc": "월별 간트 차트 (좌측 카테고리 + 12개월 그리드)",
         "zones": [
-            {"id": "categories", "x": ML_IN, "y": Z["ct_y"],
-             "w": 2.0, "h": Z["ct_h"], "role": "body"},
-            {"id": "grid", "x": ML_IN + 2.1, "y": Z["ct_y"],
-             "w": CW_IN - 2.1, "h": Z["ct_h"], "role": "table"},
+            {"id": "categories", "x": ml_in, "y": z["ct_y"],
+             "w": 2.0, "h": z["ct_h"], "role": "body"},
+            {"id": "grid", "x": ml_in + 2.1, "y": z["ct_y"],
+             "w": cw_in - 2.1, "h": z["ct_h"], "role": "table"},
         ],
     },
 
@@ -1354,43 +1402,43 @@ LAYOUTS = {
     "SPLIT_DARK_LIGHT": {
         "desc": "좌측 다크 배경 + 우측 라이트 배경 분할",
         "zones": [
-            {"id": "left_title", "x": 1.0, "y": Z["ct_y"], "w": 5.0, "h": 0.6, "role": "header"},
-            {"id": "left_body", "x": 1.0, "y": Z["ct_y"] + 0.9, "w": 5.0, "h": Z["ct_h"] - 0.9, "role": "body"},
-            {"id": "right_title", "x": 7.5, "y": Z["ct_y"], "w": 5.0, "h": 0.6, "role": "header"},
-            {"id": "right_body", "x": 7.5, "y": Z["ct_y"] + 0.9, "w": 5.0, "h": Z["ct_h"] - 0.9, "role": "body"},
+            {"id": "left_title", "x": ml_in, "y": z["ct_y"], "w": _cols_local(2), "h": 0.6, "role": "header"},
+            {"id": "left_body", "x": ml_in, "y": z["ct_y"] + 0.9, "w": _cols_local(2), "h": z["ct_h"] - 0.9, "role": "body"},
+            {"id": "right_title", "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"], "w": _cols_local(2), "h": 0.6, "role": "header"},
+            {"id": "right_body", "x": ml_in + _cols_local(2) + cgap, "y": z["ct_y"] + 0.9, "w": _cols_local(2), "h": z["ct_h"] - 0.9, "role": "body"},
         ],
     },
     # ── 22. 중앙 인용문 ──────────────────────────────────────────
     "QUOTE_CENTER": {
         "desc": "중앙 대형 인용문 + 하단 출처",
         "zones": [
-            {"id": "quote", "x": ML_IN + CW_IN * 0.08, "y": Z["ct_y"] + 0.8, "w": CW_IN * 0.84, "h": 3.2, "role": "body"},
-            {"id": "author", "x": ML_IN + CW_IN * 0.08, "y": Z["ct_y"] + 4.3, "w": CW_IN * 0.84, "h": 0.5, "role": "footer"},
+            {"id": "quote", "x": ml_in + cw_in * 0.08, "y": z["ct_y"] + 0.8, "w": cw_in * 0.84, "h": 3.2, "role": "body"},
+            {"id": "author", "x": ml_in + cw_in * 0.08, "y": z["ct_y"] + 4.3, "w": cw_in * 0.84, "h": 0.5, "role": "footer"},
         ],
     },
     # ── 23. 메트릭 하이라이트 ────────────────────────────────────
     "METRIC_HIGHLIGHT": {
         "desc": "대형 숫자 1개 + 설명 + 산출근거",
         "zones": [
-            {"id": "metric", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN, "h": 2.5, "role": "kpi"},
-            {"id": "label", "x": ML_IN, "y": Z["ct_y"] + 2.5, "w": CW_IN, "h": 0.6, "role": "header"},
-            {"id": "detail", "x": ML_IN, "y": Z["ct_y"] + 3.3, "w": CW_IN, "h": Z["ct_h"] - 3.3, "role": "body"},
+            {"id": "metric", "x": ml_in, "y": z["ct_y"], "w": cw_in, "h": 2.5, "role": "kpi"},
+            {"id": "label", "x": ml_in, "y": z["ct_y"] + 2.5, "w": cw_in, "h": 0.6, "role": "header"},
+            {"id": "detail", "x": ml_in, "y": z["ct_y"] + 3.3, "w": cw_in, "h": z["ct_h"] - 3.3, "role": "body"},
         ],
     },
     # ── 24. 체크리스트 ───────────────────────────────────────────
     "CHECKLIST": {
         "desc": "체크마크 + 항목 리스트",
         "zones": [
-            {"id": "checks", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN * 0.55, "h": Z["ct_h"], "role": "body"},
-            {"id": "summary", "x": ML_IN + CW_IN * 0.6, "y": Z["ct_y"], "w": CW_IN * 0.4, "h": Z["ct_h"], "role": "body"},
+            {"id": "checks", "x": ml_in, "y": z["ct_y"], "w": cw_in * 0.55, "h": z["ct_h"], "role": "body"},
+            {"id": "summary", "x": ml_in + cw_in * 0.6, "y": z["ct_y"], "w": cw_in * 0.4, "h": z["ct_h"], "role": "body"},
         ],
     },
     # ── 25. 번호 단계 설명 ───────────────────────────────────────
     "NUMBERED_STEPS": {
         "desc": "큰 번호 + 단계별 제목/설명 (세로 나열)",
         "zones": [
-            {"id": f"step{i+1}", "x": ML_IN, "y": Z["ct_y"] + (Z["ct_h"] / 4 + 0.05) * i,
-             "w": CW_IN, "h": Z["ct_h"] / 4 - 0.25, "role": "body"}
+            {"id": f"step{i+1}", "x": ml_in, "y": z["ct_y"] + (z["ct_h"] / 4 + 0.05) * i,
+             "w": cw_in, "h": z["ct_h"] / 4 - 0.25, "role": "body"}
             for i in range(4)
         ],
     },
@@ -1398,9 +1446,9 @@ LAYOUTS = {
     "TWO_ROW_THREE_COL": {
         "desc": "2행 × 3열 카드 그리드 (6개 항목)",
         "zones": [
-            {"id": f"cell_{r}_{c}", "x": ML_IN + (_cols(3) + CGAP) * c,
-             "y": Z["ct_y"] + (Z["ct_h"] / 2 + 0.1) * r,
-             "w": _cols(3), "h": Z["ct_h"] / 2 - 0.15, "role": "card"}
+            {"id": f"cell_{r}_{c}", "x": ml_in + (_cols_local(3) + cgap) * c,
+             "y": z["ct_y"] + (z["ct_h"] / 2 + 0.1) * r,
+             "w": _cols_local(3), "h": z["ct_h"] / 2 - 0.15, "role": "card"}
             for r in range(2) for c in range(3)
         ],
     },
@@ -1408,24 +1456,24 @@ LAYOUTS = {
     "DONUT_STATS": {
         "desc": "좌측 도넛 차트 + 우측 통계 항목",
         "zones": [
-            {"id": "donut", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN * 0.4, "h": Z["ct_h"], "role": "body"},
-            {"id": "stats", "x": ML_IN + CW_IN * 0.45, "y": Z["ct_y"], "w": CW_IN * 0.55, "h": Z["ct_h"], "role": "body"},
+            {"id": "donut", "x": ml_in, "y": z["ct_y"], "w": cw_in * 0.4, "h": z["ct_h"], "role": "body"},
+            {"id": "stats", "x": ml_in + cw_in * 0.45, "y": z["ct_y"], "w": cw_in * 0.55, "h": z["ct_h"], "role": "body"},
         ],
     },
     # ── 28. 사이드바 + 콘텐츠 ────────────────────────────────────
     "SIDEBAR_CONTENT": {
         "desc": "좌측 좁은 사이드바 + 우측 넓은 콘텐츠",
         "zones": [
-            {"id": "sidebar", "x": ML_IN, "y": Z["ct_y"], "w": CW_IN * 0.25, "h": Z["ct_h"], "role": "body"},
-            {"id": "content", "x": ML_IN + CW_IN * 0.28, "y": Z["ct_y"], "w": CW_IN * 0.72, "h": Z["ct_h"], "role": "body"},
+            {"id": "sidebar", "x": ml_in, "y": z["ct_y"], "w": cw_in * 0.25, "h": z["ct_h"], "role": "body"},
+            {"id": "content", "x": ml_in + cw_in * 0.28, "y": z["ct_y"], "w": cw_in * 0.72, "h": z["ct_h"], "role": "body"},
         ],
     },
     # ── 29. 아젠다 리스트 ────────────────────────────────────────
     "AGENDA_LIST": {
         "desc": "번호 + 제목 + 설명 리스트 (목차/요약용)",
         "zones": [
-            {"id": f"item{i+1}", "x": ML_IN, "y": Z["ct_y"] + (Z["ct_h"] / 5 + 0.04) * i,
-             "w": CW_IN, "h": Z["ct_h"] / 5 - 0.25, "role": "body"}
+            {"id": f"item{i+1}", "x": ml_in, "y": z["ct_y"] + (z["ct_h"] / 5 + 0.04) * i,
+             "w": cw_in, "h": z["ct_h"] / 5 - 0.25, "role": "body"}
             for i in range(5)
         ],
     },
@@ -1433,16 +1481,20 @@ LAYOUTS = {
     "ICON_CARD_4": {
         "desc": "아이콘 + 제목 + 설명 4단 카드",
         "zones": [
-            {"id": f"icon{i+1}", "x": ML_IN + (_cols(4) + CGAP) * i, "y": Z["ct_y"],
-             "w": _cols(4), "h": 1.2, "role": "image"}
+            {"id": f"icon{i+1}", "x": ml_in + (_cols_local(4) + cgap) * i, "y": z["ct_y"],
+             "w": _cols_local(4), "h": 1.2, "role": "image"}
             for i in range(4)
         ] + [
-            {"id": f"card{i+1}", "x": ML_IN + (_cols(4) + CGAP) * i, "y": Z["ct_y"] + 1.5,
-             "w": _cols(4), "h": Z["ct_h"] - 1.5, "role": "card"}
+            {"id": f"card{i+1}", "x": ml_in + (_cols_local(4) + cgap) * i, "y": z["ct_y"] + 1.5,
+             "w": _cols_local(4), "h": z["ct_h"] - 1.5, "role": "card"}
             for i in range(4)
         ],
     },
-}
+    }
+
+
+# Module-level LAYOUTS — 기본 16:9 (apply_format() 으로 동적 갱신 가능)
+LAYOUTS = _build_layouts(13.333, 7.5, 1.2, 1.2)
 
 
 def get_zones(layout_name):
