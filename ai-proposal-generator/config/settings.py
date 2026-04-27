@@ -39,6 +39,14 @@ class Settings(BaseModel):
     claude_model_fast: str = Field(
         default_factory=lambda: os.getenv("CLAUDE_MODEL_FAST", "claude-haiku-4-5")
     )
+    # Stage 5 (DesignAgent) HTML 생성 전용 모델 — 기본은 Sonnet 4.6 (속도/비용 균형)
+    claude_model_design: str = Field(
+        default_factory=lambda: os.getenv("CLAUDE_MODEL_DESIGN", "claude-sonnet-4-6")
+    )
+    # DesignAgent 글로벌 타임아웃 (초) — Claude API 다중 호출 안전망
+    design_global_timeout_seconds: int = Field(
+        default_factory=lambda: int(os.getenv("DESIGN_GLOBAL_TIMEOUT_SECONDS", "1800"))
+    )
     max_text_chars: int = Field(
         default_factory=lambda: int(os.getenv("MAX_TEXT_CHARS", "30000"))
     )

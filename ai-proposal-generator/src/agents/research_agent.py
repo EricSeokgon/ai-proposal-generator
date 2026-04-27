@@ -1,10 +1,16 @@
 """
 리서치 에이전트 (Stage 2)
 
-분석 결과를 기반으로 시장/경쟁/트렌드 추가 정보를 MCP WebSearch로 수집
+분석 결과를 기반으로 시장/경쟁/트렌드 추가 정보를 수집한다.
+
+⚠️ 중요: 현재 본 에이전트는 **실제 웹 검색을 수행하지 않으며**, Claude 모델의 학습 데이터를
+기반으로 응답한다. 따라서 시장 데이터/통계/경쟁사 정보가 **최신 정보가 아닐 수 있고
+환각(hallucination)을 포함할 수 있다**. 실제 MCP WebSearch 또는 별도 검색 API 연동 시
+``_perform_research`` 메서드를 확장해야 한다.
 """
 
 import json
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional
 
 from .base_agent import BaseAgent
@@ -13,6 +19,9 @@ from ..schemas.research_schema import ResearchResult
 from ..utils.logger import get_logger
 
 logger = get_logger("research_agent")
+
+# 출처 메타 — 사용자/하위 에이전트가 데이터의 신뢰도 컨텍스트를 알 수 있게 하는 마커
+RESEARCH_SOURCE_MARKER_LLM = "claude_internal_knowledge"
 
 
 class ResearchAgent(BaseAgent):
@@ -109,19 +118,28 @@ JSON 배열로 응답해주세요: ["쿼리1", "쿼리2", ...]"""
         elif isinstance(queries, dict) and "queries" in queries:
             return queries["queries"][:10]
 
+        # 폴백 쿼리 — 동적 연도 사용 (이전: "2024 2025" 하드코딩)
+        current_year = datetime.now().year
         return [
             f"{rfp_dict.get('project_name', '')} 시장 규모",
-            f"{rfp_dict.get('project_type', '')} 트렌드 2024 2025",
+            f"{rfp_dict.get('project_type', '')} 트렌드 {current_year - 1} {current_year}",
         ]
 
     async def _perform_research(
         self, rfp_dict: Dict, search_queries: List[str]
     ) -> str:
-        """웹 검색 수행 및 결과 수집
+        """웹 검색 수행 및 결과 수집.
 
-        Note: 실제 MCP WebSearch 연동 시 이 메서드를 확장합니다.
-        현재는 Claude의 지식 기반으로 리서치를 수행합니다.
+        ⚠️ 현재 외부 웹 검색이 연동되지 않아 Claude 모델의 학습 데이터에만 의존한다.
+        결과는 학습 컷오프 이전 시점의 정보이며 환각이 포함될 수 있음을 호출자가
+        반드시 인지해야 한다 (``ResearchResult.sources`` 에 마커 추가).
+        실제 MCP WebSearch 연동 시 이 메서드를 확장한다.
         """
+        self.logger.warning(
+            "ResearchAgent: 외부 웹 검색 미연동 — Claude 학습 데이터 기반 응답이며 "
+            "최신성/정확성을 보장하지 않음 (출처 마커: "
+            f"{RESEARCH_SOURCE_MARKER_LLM})"
+        )
         system_prompt = self._load_prompt("research")
         if not system_prompt:
             self.logger.warning(
@@ -159,8 +177,17 @@ JSON 형식으로 응답해주세요.
     async def _structure_results(
         self, rfp_dict: Dict, raw_results: str, search_queries: List[str]
     ) -> ResearchResult:
-        """리서치 결과를 ResearchResult 스키마로 구조화"""
+        """리서치 결과를 ResearchResult 스키마로 구조화.
+
+        외부 웹 검색이 미연동된 상태에서는 ``sources`` 리스트 마지막에
+        ``RESEARCH_SOURCE_MARKER_LLM`` 마커를 자동 추가해 하위 단계가
+        데이터 출처 컨텍스트를 인식할 수 있게 한다.
+        """
         data = self._extract_json(raw_results)
+        sources = list(data.get("sources", []))
+        # 외부 검색 미연동 마커 — 중복 추가 방지
+        if RESEARCH_SOURCE_MARKER_LLM not in sources:
+            sources.append(RESEARCH_SOURCE_MARKER_LLM)
 
         return ResearchResult(
             market_data=[
@@ -191,7 +218,7 @@ JSON 형식으로 응답해주세요.
                 for item in data.get("kpi_benchmarks", [])
             ],
             additional_insights=data.get("additional_insights", []),
-            sources=data.get("sources", []),
+            sources=sources,
             search_queries=search_queries,
         )
 

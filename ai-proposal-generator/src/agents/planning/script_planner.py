@@ -158,12 +158,85 @@ class ScriptPlanner(BaseAgent):
         response = self._call_claude(system_prompt, user_message, max_tokens=8192)
         data = self._extract_json(response)
 
+        scripts = self._coerce_scripts_list(data)
+        if not scripts:
+            self.logger.warning(
+                f"Phase {phase_num}: Claude 응답에서 스크립트 배열 추출 실패 "
+                f"(type={type(data).__name__}) — specs 기반 폴백 슬라이드 생성"
+            )
+            return self._build_fallback_scripts(specs, phase_num)
+
+        # 각 항목이 dict 인지 정합성 검증 (잘못된 항목은 폴백으로 대체)
+        validated: List[Dict] = []
+        for i, item in enumerate(scripts):
+            if not isinstance(item, dict):
+                self.logger.warning(
+                    f"Phase {phase_num} 스크립트[{i}] 가 dict 아님 ({type(item).__name__}) — 폴백"
+                )
+                spec = specs[i] if i < len(specs) else {"slide_index": -1, "phase_number": phase_num, "topic": ""}
+                validated.append(self._make_fallback_script(spec, phase_num))
+            else:
+                validated.append(item)
+
+        # 응답 슬라이드 수가 specs 보다 적으면 누락분 폴백 채움 (전체 손실 방지)
+        if len(validated) < len(specs):
+            self.logger.warning(
+                f"Phase {phase_num}: Claude 응답 슬라이드 수({len(validated)}) "
+                f"< specs({len(specs)}) — 누락분 폴백으로 채움"
+            )
+            received_indices = {s.get("slide_index") for s in validated if isinstance(s, dict)}
+            for spec in specs:
+                if spec.get("slide_index") not in received_indices:
+                    validated.append(self._make_fallback_script(spec, phase_num))
+
+        return validated
+
+    @staticmethod
+    def _coerce_scripts_list(data: Any) -> List[Dict]:
+        """Claude 응답을 슬라이드 dict 리스트로 강제 변환.
+
+        지원 형식:
+        - ``[...]``           → 그대로
+        - ``{"scripts": [...]}`` → 추출
+        - 기타                → 빈 리스트
+        """
         if isinstance(data, list):
             return data
-        elif isinstance(data, dict) and "scripts" in data:
-            return data["scripts"]
-
+        if isinstance(data, dict):
+            if "scripts" in data and isinstance(data["scripts"], list):
+                return data["scripts"]
+            # 일부 응답이 {"slides": [...]} 등으로 올 가능성 처리
+            for key in ("slides", "items", "data"):
+                if key in data and isinstance(data[key], list):
+                    return data[key]
         return []
+
+    @staticmethod
+    def _make_fallback_script(spec: Dict, phase_num: int) -> Dict:
+        """단일 폴백 스크립트 — specs 정보로 최소 슬라이드 생성.
+
+        후속 단계에서 ``[자동 폴백]`` 마커로 재생성 대상을 식별할 수 있다.
+        """
+        topic = spec.get("topic", "콘텐츠 미생성")
+        return {
+            "slide_index": spec.get("slide_index", -1),
+            "phase_number": spec.get("phase_number", phase_num),
+            "action_title": f"[자동 폴백] {topic}",
+            "slide_type": "content",
+            "content": {
+                "slide_type": "content",
+                "title": topic,
+                "bullets": [],
+                "key_message": "[자동 폴백 — 재생성 권장]",
+            },
+            "key_message": "[자동 폴백 — 재생성 권장]",
+            "speaker_notes": "Claude 응답 파싱 실패로 인한 placeholder. 재생성 시 Action Title 보강 필요.",
+            "win_theme_reference": None,
+        }
+
+    def _build_fallback_scripts(self, specs: List[Dict], phase_num: int) -> List[Dict]:
+        """specs 전체에 대해 폴백 스크립트 생성"""
+        return [self._make_fallback_script(spec, phase_num) for spec in specs]
 
     def _get_default_prompt(self) -> str:
         return """당신은 입찰 제안서 콘텐츠 전문가입니다.

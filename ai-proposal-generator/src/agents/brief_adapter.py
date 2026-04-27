@@ -175,7 +175,26 @@ JSON 추출:
         return self._extract_json(response)
 
     def _load_file(self, path: str) -> str:
+        """파일 로드 — 인코딩 오류, 권한 오류는 워닝 후 빈 문자열 반환.
+
+        브리프 파일 1개의 인코딩 문제로 전체 변환이 중단되지 않도록 한다.
+        """
         if not path:
             return ""
         p = Path(path)
-        return p.read_text(encoding="utf-8") if p.exists() else ""
+        if not p.exists():
+            return ""
+        try:
+            return p.read_text(encoding="utf-8")
+        except UnicodeDecodeError as e:
+            self.logger.warning(
+                f"파일 인코딩 오류 ({p.name}, UTF-8 디코드 실패: {e}) → cp949 재시도"
+            )
+            try:
+                return p.read_text(encoding="cp949")
+            except (UnicodeDecodeError, OSError) as e2:
+                self.logger.error(f"cp949 폴백도 실패 ({p.name}): {e2} → 빈 문자열 반환")
+                return ""
+        except OSError as e:
+            self.logger.warning(f"파일 읽기 실패 ({p.name}): {e} → 빈 문자열 반환")
+            return ""

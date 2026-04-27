@@ -19,7 +19,9 @@ from ..utils.logger import get_logger
 
 logger = get_logger("design_agent")
 
-# Claude HTML 생성에 사용할 모델 (속도/비용/품질 균형)
+# Claude HTML 생성에 사용할 모델 — 환경변수 ``CLAUDE_MODEL_DESIGN`` 또는
+# ``settings.claude_model_design`` 으로 오버라이드 가능 (기본: claude-sonnet-4-6)
+# 모듈 레벨 상수는 후방 호환성을 위해 유지 — 실제 호출은 self.settings 우선.
 DESIGN_MODEL = "claude-sonnet-4-6"
 
 # 슬라이드 유형별 디자인 가이드
@@ -317,11 +319,16 @@ class DesignAgent(BaseAgent):
         concurrency: int,
         progress_callback: Optional[Callable],
     ) -> tuple[int, List[int]]:
-        """슬라이드별 HTML을 병렬 생성"""
+        """슬라이드별 HTML을 병렬 생성 (글로벌 타임아웃 적용).
+
+        ``settings.design_global_timeout_seconds`` 가 만료되면 미완료 슬라이드는
+        cancel 되고 ``failed`` 에 추가된다. 이미 완료된 슬라이드의 결과는 보존된다.
+        """
         sem = asyncio.Semaphore(concurrency)
         total = len(slide_jobs)
         done = {"count": 0, "ok": 0}
         failed: List[int] = []
+        completed_indices: set = set()
 
         async def _run(job: Dict[str, Any]) -> None:
             idx = job["index"]
@@ -334,9 +341,14 @@ class DesignAgent(BaseAgent):
                     with open(out_path, "w", encoding="utf-8") as f:
                         f.write(html)
                     done["ok"] += 1
+                    completed_indices.add(idx)
+                except asyncio.CancelledError:
+                    # 타임아웃 발생 시 cancel 됨 — 호출자(asyncio.wait_for)에서 처리
+                    raise
                 except Exception as e:
-                    logger.error(f"슬라이드 {idx} HTML 생성 실패: {e}")
+                    self.logger.error(f"슬라이드 {idx} HTML 생성 실패: {e}")
                     failed.append(idx)
+                    completed_indices.add(idx)  # "처리됨" 으로 트래킹
                 finally:
                     done["count"] += 1
                     if progress_callback:
@@ -347,8 +359,24 @@ class DesignAgent(BaseAgent):
                             "message": f"HTML 생성 진행: {done['count']}/{total}",
                         })
 
-        await asyncio.gather(*[_run(j) for j in slide_jobs])
-        return done["ok"], sorted(failed)
+        timeout_s = self.settings.design_global_timeout_seconds
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*[_run(j) for j in slide_jobs]),
+                timeout=timeout_s,
+            )
+        except asyncio.TimeoutError:
+            # 타임아웃 — 미완료 슬라이드 모두 failed 에 추가
+            unfinished = [
+                j["index"] for j in slide_jobs if j["index"] not in completed_indices
+            ]
+            failed.extend(unfinished)
+            self.logger.error(
+                f"DesignAgent 글로벌 타임아웃 ({timeout_s}초) — "
+                f"완료 {done['ok']}/{total}, 미완료 {len(unfinished)}장 cancel"
+            )
+
+        return done["ok"], sorted(set(failed))
 
     def _generate_html_for_slide(self, job: Dict[str, Any], ds: Dict) -> str:
         """단일 슬라이드 HTML 생성 (Claude API 동기 호출)"""
@@ -413,10 +441,11 @@ class DesignAgent(BaseAgent):
     def _call_claude_html(
         self, system_prompt: str, user_message: str, max_tokens: int
     ) -> str:
-        """디자인 전용 Claude 호출 (Sonnet 4.6 강제)"""
+        """디자인 전용 Claude 호출 (settings.claude_model_design 우선)"""
+        design_model = self.settings.claude_model_design
         try:
             message = self.client.messages.create(
-                model=DESIGN_MODEL,
+                model=design_model,
                 max_tokens=max_tokens,
                 system=system_prompt,
                 messages=[{"role": "user", "content": user_message}],
@@ -424,7 +453,9 @@ class DesignAgent(BaseAgent):
             return message.content[0].text
         except Exception as e:
             # 모델 미지원 등으로 실패 시 기본 모델로 폴백
-            logger.warning(f"DESIGN_MODEL({DESIGN_MODEL}) 호출 실패, 기본 모델로 폴백: {e}")
+            self.logger.warning(
+                f"design_model({design_model}) 호출 실패, 기본 모델로 폴백: {e}"
+            )
             return self._call_claude(system_prompt, user_message, max_tokens=max_tokens)
 
     @staticmethod
@@ -609,7 +640,7 @@ class DesignAgent(BaseAgent):
 
 ## 개요
 - 총 {total}장의 슬라이드 HTML을 Claude로 자동 생성했습니다
-- 사용 모델: **{DESIGN_MODEL}**
+- 사용 모델: **{self.settings.claude_model_design}**
 - 테마: **{ds.get('theme_name', 'warm_minimal')}**
 - 생성 성공: **{generated} / {total}장**
 - 생성 실패 슬라이드: {failed_str}
