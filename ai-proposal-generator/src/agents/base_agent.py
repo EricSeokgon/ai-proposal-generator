@@ -86,6 +86,80 @@ class BaseAgent(ABC):
 
         return prompt_path.read_text(encoding="utf-8")
 
+    def _load_prompt_with_domain(
+        self,
+        prompt_name: str,
+        proposal_type: Optional[Any] = None,
+        public_domain: Optional[Any] = None,
+        include_bidding_cards: bool = True,
+    ) -> str:
+        """공공입찰 분기 프롬프트 + 도메인 카드 + 평가기준 카드 통합 로드
+
+        - proposal_type=PUBLIC이면 ``{prompt_name}_public.txt``를 우선,
+          없으면 ``{prompt_name}.txt``로 폴백.
+        - public_domain이 주어지면 해당 도메인 카드(``config/domains/*.md``)를 부록 합류.
+        - include_bidding_cards=True이면 평가기준+컴플라이언스 카드를 항상 합류.
+        - 모든 부록은 응답 마지막에 ``## 부록``으로 추가.
+
+        Args:
+            prompt_name: 프롬프트 파일 베이스명 (예: "phase4_action").
+                ``phase{N}_{name}`` 형식이면 PUBLIC 분기에서 ``phase{N}_{name}_public``로 라우팅.
+            proposal_type: ProposalType enum (옵션)
+            public_domain: PublicDomain enum (옵션, PUBLIC일 때만 의미 있음)
+            include_bidding_cards: 평가기준+컴플라이언스 카드 합류 여부
+
+        Returns:
+            합쳐진 system prompt 문자열
+        """
+        from config.proposal_types import (
+            ProposalType,
+            get_prompt_file,
+            get_domain_card_paths,
+        )
+
+        # 1) Phase 프롬프트 본체 로드 (PUBLIC 분기는 prompt_name이 phase{N}_{name} 형식일 때만)
+        base_text = ""
+        if proposal_type == ProposalType.PUBLIC and prompt_name.startswith("phase"):
+            try:
+                phase_num = int(prompt_name[5:].split("_", 1)[0])
+                relative = get_prompt_file(phase_num, ProposalType.PUBLIC)
+                base_path = Path(relative)
+                if not base_path.is_absolute():
+                    base_path = self.prompts_dir.parent.parent / relative
+                if base_path.exists():
+                    base_text = base_path.read_text(encoding="utf-8")
+            except (ValueError, IndexError):
+                pass
+
+        if not base_text:
+            base_text = self._load_prompt(prompt_name)
+
+        if not base_text:
+            return ""
+
+        # 2) 부록 카드 합류 (PUBLIC 분기에만 적용)
+        if proposal_type != ProposalType.PUBLIC:
+            return base_text
+
+        card_paths = get_domain_card_paths(public_domain, include_bidding_cards)
+        if not card_paths:
+            return base_text
+
+        appendix_parts = ["", "", "---", "", "# 부록 (자동 합류)"]
+        project_root = self.prompts_dir.parent.parent
+        for rel in card_paths:
+            card_path = project_root / rel
+            if not card_path.exists():
+                logger.warning(f"도메인 카드 누락: {card_path}")
+                continue
+            content = card_path.read_text(encoding="utf-8")
+            appendix_parts.append("")
+            appendix_parts.append(f"## [부록: {rel}]")
+            appendix_parts.append("")
+            appendix_parts.append(content)
+
+        return base_text + "\n".join(appendix_parts)
+
     def _extract_json(self, text: str) -> Dict[str, Any]:
         """
         텍스트에서 JSON 추출

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile src/agents/base_agent.py)",
+      "Bash(python -m py_compile src/agents/analysis_agent.py src/agents/base_agent.py src/schemas/rfp_schema.py config/proposal_types.py)",
+      "Bash(python -m py_compile config/proposal_types.py src/agents/base_agent.py src/agents/analysis_agent.py src/schemas/rfp_schema.py)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

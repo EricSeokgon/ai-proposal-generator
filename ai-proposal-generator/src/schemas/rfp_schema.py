@@ -127,6 +127,48 @@ class RFPAnalysis(BaseModel):
         description="예상 경쟁 환경 분석"
     )
 
+    # 공공입찰 특화 필드 (project_type=public일 때 채워짐)
+    public_domain: Optional[str] = Field(
+        default=None,
+        description="공공입찰 도메인 (bigdata_build/bigdata_maintenance/bigdata_analytics/bigdata_modernization/ai/infra/cctv/data_governance)"
+    )
+    bidding_method: Optional[str] = Field(
+        default=None,
+        description="입찰 방식 (협상에 의한 계약 / 적격심사 / 일반경쟁 / 수의계약)"
+    )
+    quantitative_criteria: List[EvaluationCriterion] = Field(
+        default_factory=list,
+        description="정량 평가 항목 (가격·수행기간·인력 등)"
+    )
+    qualitative_criteria: List[EvaluationCriterion] = Field(
+        default_factory=list,
+        description="정성 평가 항목 (기술·실적·보안 등)"
+    )
+    security_requirements: List[str] = Field(
+        default_factory=list,
+        description="보안 요구사항 (망분리·암호화·ISMS-P 등)"
+    )
+    required_certifications: List[str] = Field(
+        default_factory=list,
+        description="필수 인증 (ISMS-P/CSAP/CC/KCMVP/GS/CMMI 등)"
+    )
+    eligibility_requirements: List[str] = Field(
+        default_factory=list,
+        description="입찰 자격 요건 (SW사업자·정통공사업·재무·유사실적 등)"
+    )
+    similar_performance_requirements: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="유사 실적 요구 (기간·계약규모·건수)"
+    )
+    estimated_price: Optional[str] = Field(
+        default=None,
+        description="추정가격 (RFP 명시)"
+    )
+    contract_period: Optional[str] = Field(
+        default=None,
+        description="계약 기간 (운영·유지보수 사업 특히 중요)"
+    )
+
     # 원본 데이터
     raw_sections: Optional[Dict[str, Any]] = Field(
         default=None, description="원본 섹션 데이터"

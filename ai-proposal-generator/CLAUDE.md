@@ -11,8 +11,53 @@ RFP/기획안 문서를 입력받아 PPTX 제안서를 자동 생성하고, HTML
 | 유형 | 설명 | 필수 자료 | 선택 자료 |
 |------|------|----------|----------|
 | **마케팅 제안서** | SNS 운영, 브랜드 캠페인, 홍보, PR | RFP/기획안 | 브랜드 가이드, 경쟁사 자료 |
-| **입찰 제안서** | 공공입찰, IT, 컨설팅, 이벤트 | RFP(평가기준 포함) | 회사소개서, 유사실적 |
+| **공공입찰 제안서** ⭐ | 나라장터·조달청 (8개 도메인 자동 분기) | RFP(평가기준 포함) | 유사실적 5건+, 인증서, 핵심 인력 이력 |
 | **기타** | 사용자 정의 (질문을 통해 설정) | 기획안/브리프 | 자유 |
+
+## 공공입찰 (나라장터) 특화 시스템 ⭐
+
+이 시스템은 한국 공공입찰(나라장터·조달청) 제안서 작성에 최적화되어 있습니다.
+
+### 8대 도메인 자동 분기
+
+| 도메인 | 카드 파일 | 핵심 |
+|--------|---------|------|
+| 빅데이터 신규 구축 | [config/domains/bigdata.md](config/domains/bigdata.md) | Hadoop·Spark·Lakehouse |
+| 빅데이터 유지보수 | [config/domains/bigdata_maintenance.md](config/domains/bigdata_maintenance.md) | SLA·ITIL·24/7 NOC |
+| 빅데이터 분석 | [config/domains/bigdata_analytics.md](config/domains/bigdata_analytics.md) | CRISP-DM·정책 분석·BI |
+| 빅데이터 고도화 | [config/domains/bigdata_modernization.md](config/domains/bigdata_modernization.md) | 6단계 무중단 전환·CDC |
+| AI / ML / LLM | [config/domains/ai.md](config/domains/ai.md) | KMMLU·MLOps·신뢰성 |
+| 인프라 / 클라우드 | [config/domains/infra.md](config/domains/infra.md) | K-Cloud·CSAP·이중화·DR |
+| CCTV / 스마트시티 | [config/domains/cctv.md](config/domains/cctv.md) | 5대 안전망·VMS·LPR |
+| 데이터 거버넌스 | [config/domains/data_governance.md](config/domains/data_governance.md) | 데이터3법·가명결합·KCMVP |
+
+각 카드는 정책·법제·아키텍처·KPI 벤치마크·인증·핵심 인력·유사 사업 레퍼런스를 포함.
+
+### 공공입찰 공통 카드 (모든 도메인에 자동 합류)
+- [config/public_bidding/evaluation_criteria.md](config/public_bidding/evaluation_criteria.md) — 협상에 의한 계약·적격심사·평가표·RTM·노임단가
+- [config/public_bidding/compliance.md](config/public_bidding/compliance.md) — ISMS-P·CSAP·CC·KCMVP·GS·CMMI·인력 자격
+
+### 공공입찰 Phase 프롬프트 (자동 분기)
+
+`AnalysisAgent`가 RFP에서 공공입찰 신호어 3개+ 감지 시 `phase{N}_*_public.txt`로 자동 라우팅:
+
+| Phase | 공공입찰 프롬프트 | 핵심 차별점 |
+|-------|----------------|-----------|
+| 2. INSIGHT | [phase2_insight_public.txt](config/prompts/phase2_insight_public.txt) | 정책 연계 + As-Is 진단 + RTM 매트릭스 |
+| 4. ACTION | [phase4_action_public.txt](config/prompts/phase4_action_public.txt) | WBS·아키텍처·산출물 50+·ISMS-P 보안 통제·M/M |
+| 5. MGMT | [phase5_management_public.txt](config/prompts/phase5_management_public.txt) | PMO + ISMS-P + CMMI Lvl.3 + 위험 5×5 매트릭스 |
+| 6. WHY US | [phase6_whyus_public.txt](config/prompts/phase6_whyus_public.txt) | 유사 실적·핵심 인력·인증 매트릭스 (3대 축) |
+| 7. INVEST | [phase7_investment_public.txt](config/prompts/phase7_investment_public.txt) | 한국SW협회 노임단가·M/M·정책·시민 효익 |
+
+### 자동 합류 규칙
+
+`AnalysisAgent.execute()` 내부:
+1. RFP 텍스트에서 공공입찰 신호어("나라장터·조달청·협상에 의한 계약·ISMS-P" 등) 3개+ 매칭 → 공공 분기 활성화
+2. 도메인 키워드 사전(`PUBLIC_DOMAIN_KEYWORDS`)으로 매칭 점수 최고 도메인 자동 지정
+3. system prompt에 도메인 카드 + 평가기준 + 컴플라이언스 카드를 부록으로 합류
+4. 강제 지정: `input_data["force_public"]=True` 또는 `input_data["force_domain"]="cctv"` 등
+
+`BaseAgent._load_prompt_with_domain()` 라우터를 다른 에이전트에서도 동일하게 사용 가능.
 
 ## 5단계 파이프라인
 
@@ -38,6 +83,13 @@ STEP 5 🎯 디자인  → [DesignAgent] Plan JSON → Claude(Sonnet 4.6) → HT
 - @.claude/rules/slide-kit-api.md
 - @.claude/rules/layout-design.md
 - @.claude/rules/impact8-framework.md
+
+## 공공입찰 분기 자동화 규칙
+
+- `project_type="public"` 또는 RFP 자동 감지 시 → `phase{N}_*_public.txt` 우선 사용 (없으면 마케팅 폴백)
+- 도메인 카드 + `config/public_bidding/*.md`이 system prompt에 자동 합류
+- 도메인 추가/수정 시 [config/proposal_types.py](config/proposal_types.py)의 `PublicDomain` enum + `PUBLIC_DOMAIN_CARDS` + `PUBLIC_DOMAIN_KEYWORDS` 3개 동시 업데이트 필수
+- 새 phase 프롬프트는 반드시 `phase{N}_{name}_public.txt` 네이밍 규칙 준수 — `get_prompt_file()` 라우터가 이 패턴으로 탐색
 
 ## 에이전트 구조
 

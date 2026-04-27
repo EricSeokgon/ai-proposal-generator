@@ -572,8 +572,12 @@ def calculate_pages(proposal_type: ProposalType, total_pages: int = 100) -> Dict
     return result
 
 
-def get_prompt_file(phase_number: int) -> str:
-    """Phase 번호에 해당하는 프롬프트 파일 경로 반환"""
+def get_prompt_file(phase_number: int, proposal_type: Optional[ProposalType] = None) -> str:
+    """Phase 번호에 해당하는 프롬프트 파일 경로 반환
+
+    공공입찰(PUBLIC)이면 phase{N}_{name}_public.txt를 우선 반환,
+    없거나 마케팅 등이면 phase{N}_{name}.txt 폴백.
+    """
     phase_names = {
         0: "hook",
         1: "summary",
@@ -585,4 +589,133 @@ def get_prompt_file(phase_number: int) -> str:
         7: "investment",
     }
     name = phase_names.get(phase_number, "general")
+
+    if proposal_type == ProposalType.PUBLIC:
+        from pathlib import Path
+        public_path = Path(__file__).parent / "prompts" / f"phase{phase_number}_{name}_public.txt"
+        if public_path.exists():
+            return f"config/prompts/phase{phase_number}_{name}_public.txt"
+
     return f"config/prompts/phase{phase_number}_{name}.txt"
+
+
+# ════════════════════════════════════════════════════════════
+# 공공입찰 도메인 변종 (Public Domain Variants)
+# ════════════════════════════════════════════════════════════
+# PUBLIC_CONFIG의 Phase 비중·페이지를 기본으로 하면서,
+# 도메인별 special_focus·필수 산출물·인증·인력을 추가 차별화한다.
+
+class PublicDomain(str, Enum):
+    """공공입찰 도메인 변종 (8종)"""
+    BIGDATA_BUILD = "bigdata_build"                  # 빅데이터 신규 구축
+    BIGDATA_MAINTENANCE = "bigdata_maintenance"      # 빅데이터 유지보수·운영
+    BIGDATA_ANALYTICS = "bigdata_analytics"          # 빅데이터 분석·인사이트
+    BIGDATA_MODERNIZATION = "bigdata_modernization"  # 빅데이터 고도화·차세대·전환
+    AI = "ai"                                        # AI/ML/LLM
+    INFRA = "infra"                                  # 인프라/클라우드
+    CCTV = "cctv"                                    # CCTV/스마트시티
+    DATA_GOVERNANCE = "data_governance"              # 데이터 거버넌스
+
+
+# 도메인 → 도메인 카드 파일 매핑
+PUBLIC_DOMAIN_CARDS: Dict[PublicDomain, str] = {
+    PublicDomain.BIGDATA_BUILD: "config/domains/bigdata.md",
+    PublicDomain.BIGDATA_MAINTENANCE: "config/domains/bigdata_maintenance.md",
+    PublicDomain.BIGDATA_ANALYTICS: "config/domains/bigdata_analytics.md",
+    PublicDomain.BIGDATA_MODERNIZATION: "config/domains/bigdata_modernization.md",
+    PublicDomain.AI: "config/domains/ai.md",
+    PublicDomain.INFRA: "config/domains/infra.md",
+    PublicDomain.CCTV: "config/domains/cctv.md",
+    PublicDomain.DATA_GOVERNANCE: "config/domains/data_governance.md",
+}
+
+
+# 도메인 키워드 사전 (RFP 자동 감지용)
+PUBLIC_DOMAIN_KEYWORDS: Dict[PublicDomain, List[str]] = {
+    PublicDomain.BIGDATA_BUILD: [
+        "빅데이터 구축", "데이터플랫폼 구축", "데이터 통합", "데이터 표준화",
+        "데이터 레이크", "데이터 웨어하우스", "ETL", "데이터 카탈로그",
+        "메타데이터 관리", "BI 구축",
+    ],
+    PublicDomain.BIGDATA_MAINTENANCE: [
+        "유지보수", "유지관리", "운영 위탁", "통합 운영", "운영 인력",
+        "기술 지원", "장애 대응", "SLA", "ITSM", "헬프데스크",
+        "24/7 모니터링", "예방 정비", "성능 튜닝",
+    ],
+    PublicDomain.BIGDATA_ANALYTICS: [
+        "빅데이터 분석", "데이터 분석", "공공데이터 분석", "정책 분석",
+        "분석 모델 개발", "예측 모델", "대시보드", "시각화",
+        "인사이트 도출", "패턴 분석", "통계 분석", "민원 분석",
+        "유동인구 분석", "상권 분석", "범죄 예방", "감염병 예측",
+    ],
+    PublicDomain.BIGDATA_MODERNIZATION: [
+        "고도화", "차세대", "리뉴얼", "전환", "마이그레이션", "현대화",
+        "레거시 전환", "클라우드 전환", "K-Cloud 전환", "통폐합",
+        "성능 개선", "기능 확장",
+    ],
+    PublicDomain.AI: [
+        "AI", "인공지능", "머신러닝", "딥러닝", "자연어 처리", "NLP",
+        "컴퓨터 비전", "LLM", "생성형 AI", "RAG", "MLOps", "챗봇",
+        "음성 인식", "객체 인식", "예측 모델", "AI 학습 데이터",
+        "데이터 라벨링", "AI 윤리", "AI 신뢰성",
+    ],
+    PublicDomain.INFRA: [
+        "인프라 구축", "서버 도입", "스토리지", "네트워크", "데이터센터", "IDC",
+        "클라우드", "K-Cloud", "퍼블릭 클라우드", "프라이빗 클라우드",
+        "가상화", "컨테이너", "쿠버네티스", "백업", "DR", "재해복구",
+        "이중화", "HA", "망분리", "통합 운영 관리",
+    ],
+    PublicDomain.CCTV: [
+        "CCTV", "통합관제", "지능형 영상", "지능형 CCTV", "스마트시티",
+        "안전도시", "어린이 안전구역", "방범 CCTV", "교통 CCTV",
+        "VMS", "객체 인식", "이상행동", "안면 인식", "차량 번호판", "LPR",
+        "U-City", "5대 안전망", "통합플랫폼",
+    ],
+    PublicDomain.DATA_GOVERNANCE: [
+        "데이터 거버넌스", "데이터 표준화", "메타데이터", "마스터데이터", "MDM",
+        "데이터 품질", "DQM", "데이터 카탈로그", "데이터 계보", "Lineage",
+        "가명처리", "익명처리", "비식별화", "PIA", "개인정보 영향평가",
+        "마이데이터", "MyData", "데이터 3법", "DLP",
+    ],
+}
+
+# 공공입찰 컴플라이언스 카드 (도메인 무관, 항상 합류)
+PUBLIC_BIDDING_CARDS: List[str] = [
+    "config/public_bidding/evaluation_criteria.md",
+    "config/public_bidding/compliance.md",
+]
+
+
+def detect_public_domain(text: str) -> Optional[PublicDomain]:
+    """RFP 텍스트로부터 공공입찰 도메인을 자동 감지
+
+    각 도메인 키워드의 매칭 점수를 계산해 최고 점수 도메인 반환.
+    매칭이 약하면 None.
+    """
+    if not text:
+        return None
+
+    text_lower = text.lower()
+    scores: Dict[PublicDomain, int] = {}
+
+    for domain, keywords in PUBLIC_DOMAIN_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw.lower() in text_lower)
+        scores[domain] = score
+
+    if not scores or max(scores.values()) < 2:
+        return None
+
+    return max(scores, key=scores.get)
+
+
+def get_domain_card_paths(
+    domain: Optional[PublicDomain] = None,
+    include_bidding_cards: bool = True,
+) -> List[str]:
+    """도메인 + 공공입찰 카드 경로 리스트 반환 (프롬프트에 합류용)"""
+    paths: List[str] = []
+    if include_bidding_cards:
+        paths.extend(PUBLIC_BIDDING_CARDS)
+    if domain and domain in PUBLIC_DOMAIN_CARDS:
+        paths.append(PUBLIC_DOMAIN_CARDS[domain])
+    return paths
