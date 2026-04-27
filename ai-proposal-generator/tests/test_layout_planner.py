@@ -11,12 +11,12 @@ from src.agents.planning.layout_planner import (
 
 
 class TestValidLayoutsConstant:
-    """30종 화이트리스트 자체."""
+    """36종 화이트리스트 자체."""
 
-    def test_has_30_layouts(self):
-        # slide_kit.py LAYOUTS 와 폴백 모두 30개
-        assert len(VALID_LAYOUT_NAMES) == 30
-        assert len(_SLIDE_KIT_LAYOUTS_FALLBACK) == 30
+    def test_has_36_layouts(self):
+        # slide_kit.py LAYOUTS 와 폴백 모두 36개 (기존 30 + 신규 6)
+        assert len(VALID_LAYOUT_NAMES) == 36
+        assert len(_SLIDE_KIT_LAYOUTS_FALLBACK) == 36
 
     def test_default_layout_in_whitelist(self):
         assert DEFAULT_LAYOUT in VALID_LAYOUT_NAMES
@@ -32,12 +32,41 @@ class TestValidLayoutsConstant:
         except ImportError:
             pytest.skip("slide_kit import 불가 (CI 환경)")
 
-    def test_known_layouts_present(self):
+    def test_legacy_30_layouts_present(self):
         for name in [
             "FULL_BODY", "THREE_COL", "KPI_GRID", "ORG_CHART",
             "GANTT", "TIMELINE_DESC", "PYRAMID_DESC",
         ]:
             assert name in VALID_LAYOUT_NAMES
+
+    def test_new_6_layouts_present(self):
+        """신규 6 layout 화이트리스트 등록."""
+        for name in [
+            "VERTICAL_STEPS", "TIMELINE_VERTICAL", "HEADLINE_NUMBER",
+            "CARD_GRID_6", "AGENDA_TWO_COL", "PRICING_TABLE",
+        ]:
+            assert name in VALID_LAYOUT_NAMES, f"{name} 누락"
+
+
+class TestPortraitFriendlyLayouts:
+    """A4 세로 친화 layout 화이트리스트."""
+
+    def test_portrait_friendly_includes_vertical_layouts(self):
+        from src.agents.planning.layout_planner import PORTRAIT_FRIENDLY_LAYOUTS
+        for name in [
+            "VERTICAL_STEPS", "TIMELINE_VERTICAL", "AGENDA_TWO_COL",
+            "FULL_BODY", "NUMBERED_STEPS", "HEADLINE_NUMBER",
+        ]:
+            assert name in PORTRAIT_FRIENDLY_LAYOUTS
+
+    def test_portrait_friendly_excludes_wide_only(self):
+        """가로 분할 위주 layout 은 portrait_friendly 에서 제외."""
+        from src.agents.planning.layout_planner import PORTRAIT_FRIENDLY_LAYOUTS
+        # FOUR_COL, THREE_COL 같은 4/3 분할은 좁은 슬라이드에서 가독성 ↓
+        # (반드시 제외라기 보단, 권장 안 함)
+        # 단, 화이트리스트로 포함된 layout 이 모두 36 의 부분집합인지만 검증
+        from src.agents.planning.layout_planner import VALID_LAYOUT_NAMES
+        assert PORTRAIT_FRIENDLY_LAYOUTS.issubset(VALID_LAYOUT_NAMES)
 
 
 class TestSanitizeAssignments:

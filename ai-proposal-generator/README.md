@@ -2,7 +2,7 @@
 
 [![Tests](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml/badge.svg)](https://github.com/EricSeokgon/ai-proposal-generator/actions/workflows/test.yml)
 [![Python](https://img.shields.io/badge/python-3.9~3.12-blue.svg)](https://www.python.org)
-[![Tests](https://img.shields.io/badge/tests-204%20passed-brightgreen.svg)](#테스트)
+[![Tests](https://img.shields.io/badge/tests-240%20passed-brightgreen.svg)](#테스트)
 
 RFP/기획안을 입력하면 PPTX 제안서(70~140장) + Figma 임포트용 고품질 HTML을 자동 생성하는 멀티 에이전트 시스템.
 
@@ -13,9 +13,9 @@ RFP/기획안을 입력하면 PPTX 제안서(70~140장) + Figma 임포트용 고
 - **공공입찰(나라장터) 특화** ⭐: 8개 도메인 자동 분기 + 평가기준·컴플라이언스 카드 자동 합류
 - **Single-LLM (Claude) 통합 구조**: Stage 5 디자인까지 모두 Claude로 일원화 (Sonnet 4.6 HTML 자동 생성)
 - **Impact-8 Framework**: 수주 성공 제안서 기반 8-Phase 구조 + Win Theme + Action Title
-- **slide_kit.py 엔진**: 30종 레이아웃 × 6종 테마 PPTX 렌더링 엔진
+- **slide_kit.py 엔진**: **36종 레이아웃 × 10종 테마** PPTX 렌더링 엔진 (포맷별 동적 재계산)
 - **Figma 임포트**: HTML → Puppeteer → JSON → Figma 플러그인으로 네이티브 프레임 변환
-- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 204 unit tests
+- **보안·검증**: 생성 코드 AST 정적 분석, 레이아웃 화이트리스트, 경로 traversal 차단, 240 unit tests
 
 ## 사전 준비
 
@@ -295,11 +295,28 @@ pytest --tb=no -q | grep PydanticDeprecated && echo "FAIL" || echo "OK"
 
 ## 디자인 시스템
 
-### 테마 (6종)
-`warm_minimal` · `classic_blue` · `forest` · `corporate` · `mono_black` · `soft_purple`
+### 테마 (10종)
 
-### 레이아웃 (30종)
-기본(2) + 컬럼(3) + 비교/데이터(5) + 프로세스(2) + 구조(3) + 이미지(3) + 조직/일정(3) + 스페셜/리스트/그리드/카드(9)
+| 카테고리 | 테마 |
+|---------|------|
+| 기본/범용 | `warm_minimal` (기본 베이지) |
+| 기업/공공 | `classic_blue`, `corporate`, `gold_luxury` |
+| 자연/ESG | `forest` |
+| IT/미니멀 | `mono_black`, `arctic_white` |
+| 크리에이티브/뷰티 | `soft_purple`, `sunset_orange` |
+| 헬스/테크 | `ocean_teal` |
+
+### 레이아웃 (36종)
+
+기존 30종 + **신규 6종**:
+- **VERTICAL_STEPS** — 세로 5단계 (A4 세로 친화)
+- **TIMELINE_VERTICAL** — 세로 타임라인 (A4 세로 친화)
+- **HEADLINE_NUMBER** — 대형 헤드라인 + 큰 숫자 (KPI 강조)
+- **CARD_GRID_6** — 3열×2행 카드 6개 (사례·서비스 그리드)
+- **AGENDA_TWO_COL** — 2열 아젠다 10항목 (긴 목차)
+- **PRICING_TABLE** — 3열 플랜/가격 비교
+
+`apply_format()` 호출 시 36종 모두 슬라이드 사이즈에 맞게 자동 재계산됩니다.
 
 상세: [.claude/rules/layout-design.md](.claude/rules/layout-design.md), [.claude/rules/slide-kit-api.md](.claude/rules/slide-kit-api.md)
 

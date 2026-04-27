@@ -1490,6 +1490,106 @@ def _build_layouts(sw_in: float, sh_in: float, ml_in: float, mr_in: float,
             for i in range(4)
         ],
     },
+    # ── 31. 세로 5단계 (A4 세로 친화) ────────────────────────────
+    "VERTICAL_STEPS": {
+        "desc": "세로 5단계 나열 (좌측 번호 + 우측 본문, A4 세로 권장)",
+        "zones": [
+            {"id": f"step{i+1}", "x": ml_in, "y": z["ct_y"] + (z["ct_h"] / 5 + 0.04) * i,
+             "w": cw_in, "h": z["ct_h"] / 5 - 0.2, "role": "body"}
+            for i in range(5)
+        ],
+    },
+    # ── 32. 세로 타임라인 (A4 세로 친화) ─────────────────────────
+    "TIMELINE_VERTICAL": {
+        "desc": "세로 타임라인 (좌측 시점 + 우측 설명, 4단계, A4 세로 권장)",
+        "zones": (
+            [
+                # 좌측 시점 라벨
+                {"id": f"date{i+1}", "x": ml_in, "y": z["ct_y"] + (z["ct_h"] / 4) * i,
+                 "w": min(1.5, cw_in * 0.18), "h": z["ct_h"] / 4 - 0.15, "role": "header"}
+                for i in range(4)
+            ]
+            + [
+                # 우측 이벤트 설명
+                {"id": f"event{i+1}",
+                 "x": ml_in + min(1.7, cw_in * 0.20),
+                 "y": z["ct_y"] + (z["ct_h"] / 4) * i,
+                 "w": cw_in - min(1.7, cw_in * 0.20),
+                 "h": z["ct_h"] / 4 - 0.15, "role": "body"}
+                for i in range(4)
+            ]
+        ),
+    },
+    # ── 33. 대형 헤드라인 + 큰 숫자 (KPI 강조) ──────────────────────
+    "HEADLINE_NUMBER": {
+        "desc": "상단 대형 숫자 + 하단 헤드라인 + 부연 (핵심 KPI 강조)",
+        "zones": [
+            {"id": "big_number", "x": ml_in, "y": z["ct_y"],
+             "w": cw_in, "h": z["ct_h"] * 0.5, "role": "kpi"},
+            {"id": "headline", "x": ml_in, "y": z["ct_y"] + z["ct_h"] * 0.55,
+             "w": cw_in, "h": z["ct_h"] * 0.2, "role": "header"},
+            {"id": "detail", "x": ml_in, "y": z["ct_y"] + z["ct_h"] * 0.78,
+             "w": cw_in, "h": z["ct_h"] * 0.22, "role": "body"},
+        ],
+    },
+    # ── 34. 카드 그리드 6 (3열×2행, 카드 강조) ──────────────────────
+    "CARD_GRID_6": {
+        "desc": "3열 × 2행 카드 6개 — 아이콘+제목+설명 카드 강조",
+        "zones": [
+            {"id": f"card_{r}_{c}",
+             "x": ml_in + (_cols_local(3) + cgap) * c,
+             "y": z["ct_y"] + (z["ct_h"] / 2 + 0.08) * r,
+             "w": _cols_local(3), "h": z["ct_h"] / 2 - 0.12, "role": "card"}
+            for r in range(2) for c in range(3)
+        ],
+    },
+    # ── 35. 2열 아젠다 (긴 목차) ─────────────────────────────────
+    "AGENDA_TWO_COL": {
+        "desc": "2열 아젠다 리스트 — 좌5 + 우5 = 10항목 목차/체크리스트",
+        "zones": (
+            [
+                {"id": f"left_{i+1}",
+                 "x": ml_in,
+                 "y": z["ct_y"] + (z["ct_h"] / 5 + 0.04) * i,
+                 "w": _cols_local(2), "h": z["ct_h"] / 5 - 0.2, "role": "body"}
+                for i in range(5)
+            ]
+            + [
+                {"id": f"right_{i+1}",
+                 "x": ml_in + _cols_local(2) + cgap,
+                 "y": z["ct_y"] + (z["ct_h"] / 5 + 0.04) * i,
+                 "w": _cols_local(2), "h": z["ct_h"] / 5 - 0.2, "role": "body"}
+                for i in range(5)
+            ]
+        ),
+    },
+    # ── 36. 가격/플랜 비교 (3열) ─────────────────────────────────
+    "PRICING_TABLE": {
+        "desc": "3개 플랜/가격 카드 비교 (헤더+가격+기능 리스트)",
+        "zones": (
+            [
+                {"id": f"plan{i+1}_header",
+                 "x": ml_in + (_cols_local(3) + cgap) * i, "y": z["ct_y"],
+                 "w": _cols_local(3), "h": min(0.7, z["ct_h"] * 0.10), "role": "header"}
+                for i in range(3)
+            ]
+            + [
+                {"id": f"plan{i+1}_price",
+                 "x": ml_in + (_cols_local(3) + cgap) * i,
+                 "y": z["ct_y"] + min(0.85, z["ct_h"] * 0.13),
+                 "w": _cols_local(3), "h": min(1.4, z["ct_h"] * 0.20), "role": "kpi"}
+                for i in range(3)
+            ]
+            + [
+                {"id": f"plan{i+1}_features",
+                 "x": ml_in + (_cols_local(3) + cgap) * i,
+                 "y": z["ct_y"] + min(2.4, z["ct_h"] * 0.35),
+                 "w": _cols_local(3),
+                 "h": z["ct_h"] - min(2.4, z["ct_h"] * 0.35), "role": "body"}
+                for i in range(3)
+            ]
+        ),
+    },
     }
 
 
@@ -2351,6 +2451,50 @@ THEMES = {
         "orange": (200, 155, 100), "gold": (170, 145, 110),
         "card_bg": (246, 243, 250), "card_border": (228, 224, 238),
         "_meta": {"margin": 1.0, "font_hero": 50, "font_action": 18, "font_body": 12},
+    },
+    # ── 7. 따뜻한 오렌지 (마케팅/스타트업/F&B) ─────────────────────
+    "sunset_orange": {
+        "primary": (210, 90, 50), "secondary": (240, 130, 90),
+        "teal": (180, 95, 70), "accent": (230, 165, 80),
+        "dark": (60, 35, 25), "light": (250, 240, 232),
+        "white": (255, 248, 242), "gray": (140, 110, 95),
+        "lgray": (225, 205, 190), "green": (120, 145, 90),
+        "orange": (240, 145, 75), "gold": (215, 165, 90),
+        "card_bg": (252, 244, 236), "card_border": (235, 215, 195),
+        "_meta": {"margin": 1.0, "font_hero": 56, "font_action": 19, "font_body": 12},
+    },
+    # ── 8. 청록/민트 (헬스/테크/교육) ────────────────────────────
+    "ocean_teal": {
+        "primary": (15, 95, 115), "secondary": (60, 165, 175),
+        "teal": (30, 140, 150), "accent": (240, 130, 110),
+        "dark": (20, 50, 60), "light": (235, 245, 248),
+        "white": (245, 250, 252), "gray": (105, 130, 140),
+        "lgray": (200, 215, 220), "green": (70, 145, 130),
+        "orange": (235, 145, 100), "gold": (200, 165, 95),
+        "card_bg": (240, 248, 250), "card_border": (210, 225, 230),
+        "_meta": {"margin": 1.0, "font_hero": 52, "font_action": 18, "font_body": 12},
+    },
+    # ── 9. 골드/블랙 (프리미엄/금융/럭셔리) ───────────────────────
+    "gold_luxury": {
+        "primary": (25, 25, 30), "secondary": (190, 155, 90),
+        "teal": (140, 115, 75), "accent": (220, 185, 110),
+        "dark": (15, 15, 20), "light": (245, 240, 232),
+        "white": (252, 248, 240), "gray": (115, 110, 100),
+        "lgray": (215, 208, 195), "green": (95, 110, 80),
+        "orange": (215, 165, 95), "gold": (205, 170, 95),
+        "card_bg": (250, 244, 232), "card_border": (220, 200, 165),
+        "_meta": {"margin": 0.9, "font_hero": 58, "font_action": 20, "font_body": 13},
+    },
+    # ── 10. 화이트/실버/블루 (의료/IT/미니멀) ─────────────────────
+    "arctic_white": {
+        "primary": (55, 75, 100), "secondary": (110, 140, 175),
+        "teal": (80, 130, 155), "accent": (215, 75, 95),
+        "dark": (40, 50, 65), "light": (248, 250, 252),
+        "white": (252, 253, 255), "gray": (125, 135, 150),
+        "lgray": (215, 220, 230), "green": (85, 130, 110),
+        "orange": (215, 145, 90), "gold": (185, 165, 115),
+        "card_bg": (250, 251, 253), "card_border": (225, 230, 240),
+        "_meta": {"margin": 1.1, "font_hero": 50, "font_action": 18, "font_body": 12},
     },
 }
 

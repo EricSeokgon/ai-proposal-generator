@@ -13,9 +13,10 @@ from ...utils.logger import get_logger
 
 logger = get_logger("layout_planner")
 
-# slide_kit.LAYOUTS 30종 키 (단일 소스에서 동적 로딩)
-# 임포트 실패 시 안전 폴백을 위한 30종 키 리스트(slide_kit.py:1036~의 키 목록)
+# slide_kit.LAYOUTS 36종 키 (단일 소스에서 동적 로딩)
+# 임포트 실패 시 안전 폴백을 위한 36종 키 리스트
 _SLIDE_KIT_LAYOUTS_FALLBACK = frozenset({
+    # 기본 30종 (Phase 1)
     "FULL_BODY", "HIGHLIGHT_BODY", "TWO_COL", "THREE_COL", "FOUR_COL",
     "COMPARE_LR", "HIGHLIGHT_THREE_CARD", "KPI_GRID", "PROCESS_DESC",
     "TIMELINE_DESC", "PYRAMID_DESC", "MATRIX_DESC", "STAT_ROW",
@@ -24,6 +25,13 @@ _SLIDE_KIT_LAYOUTS_FALLBACK = frozenset({
     "SPLIT_DARK_LIGHT", "QUOTE_CENTER", "METRIC_HIGHLIGHT", "CHECKLIST",
     "NUMBERED_STEPS", "TWO_ROW_THREE_COL", "DONUT_STATS",
     "SIDEBAR_CONTENT", "AGENDA_LIST", "ICON_CARD_4",
+    # 신규 6종 (Phase 2 확장)
+    "VERTICAL_STEPS",      # 세로 5단계 (A4 세로 친화)
+    "TIMELINE_VERTICAL",   # 세로 타임라인 (A4 세로 친화)
+    "HEADLINE_NUMBER",     # 대형 헤드라인 + 큰 숫자
+    "CARD_GRID_6",         # 3열×2행 카드 6개
+    "AGENDA_TWO_COL",      # 2열 아젠다 10항목
+    "PRICING_TABLE",       # 3열 플랜/가격 비교
 })
 
 
@@ -48,9 +56,11 @@ CONTENT_LAYOUT_MAP = {
     "채널 비교": "COMPARE_LR",
     "실행 프로세스": "PROCESS_DESC",
     "KPI": "KPI_GRID",
+    "대형 KPI": "HEADLINE_NUMBER",          # 신규 — 핵심 1개 숫자 강조
     "일정": "GANTT",
+    "세로 일정": "TIMELINE_VERTICAL",        # 신규 — A4 세로 일정
     "조직도": "ORG_CHART",
-    "실적": "GALLERY_3x2",
+    "실적": "CARD_GRID_6",                  # 신규 — 6개 사례 카드
     "리스크": "RISK_CARD",
     "데이터 비교": "TABLE_INSIGHT",
     "통계": "FULL_BODY",
@@ -58,10 +68,25 @@ CONTENT_LAYOUT_MAP = {
     "차별화": "FOUR_COL",
     "매트릭스": "MATRIX_DESC",
     "키비주얼": "KEY_VISUAL",
-    "인용문": "HIGHLIGHT_BODY",
-    "예산": "FULL_BODY",
+    "인용문": "QUOTE_CENTER",
+    "예산": "PRICING_TABLE",                # 신규 — 비용/플랜 비교
+    "플랜 비교": "PRICING_TABLE",            # 신규
     "차트": "FULL_BODY",
+    "단계 설명": "VERTICAL_STEPS",           # 신규 — A4 세로 5단계
+    "긴 목차": "AGENDA_TWO_COL",             # 신규 — 10항목 2열
+    "체크리스트": "CHECKLIST",
 }
+
+# 포맷별 권장 layout 화이트리스트 (Phase 2)
+# 좁은 가로폭(A4 세로)에서는 좌우 분할 layout 가독성 저하 → 권장 layout 별도
+PORTRAIT_FRIENDLY_LAYOUTS = frozenset({
+    "FULL_BODY", "HIGHLIGHT_BODY", "AGENDA_LIST", "AGENDA_TWO_COL",
+    "NUMBERED_STEPS", "VERTICAL_STEPS", "TIMELINE_VERTICAL",
+    "HEADLINE_NUMBER", "METRIC_HIGHLIGHT", "QUOTE_CENTER",
+    "CHECKLIST", "TABLE_INSIGHT", "ORG_CHART", "GANTT",
+    "PROCESS_DESC", "PYRAMID_DESC", "MATRIX_DESC",
+    "TOP_IMG_BOTTOM_TEXT", "STAT_ROW", "KPI_GRID",
+})
 
 
 class LayoutPlanner(BaseAgent):

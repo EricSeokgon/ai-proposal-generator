@@ -111,18 +111,32 @@ STEP 5 🎯 디자인  → [DesignAgent] Plan JSON → Claude(Sonnet 4.6) → HT
 
 ## 디자인 시스템
 
-### 테마 (6종)
+### 테마 (10종)
 ```python
+# 기존 6종
 apply_theme("warm_minimal")   # 기본 — 따뜻한 베이지
 apply_theme("classic_blue")   # 클래식 네이비 블루
 apply_theme("forest")         # 포레스트 그린 (자연/ESG)
 apply_theme("corporate")      # 코퍼레이트 네이비 (금융/공공)
 apply_theme("mono_black")     # 모노 블랙 (미니멀/IT)
 apply_theme("soft_purple")    # 소프트 퍼플 (크리에이티브)
+# 신규 4종
+apply_theme("sunset_orange")  # 따뜻한 오렌지 (마케팅/스타트업/F&B)
+apply_theme("ocean_teal")     # 청록·민트 (헬스/테크/교육)
+apply_theme("gold_luxury")    # 골드·블랙 (프리미엄/금융/럭셔리)
+apply_theme("arctic_white")   # 화이트·실버 (의료/IT/미니멀)
 ```
 
-### 레이아웃 (30종)
-기본(2) + 컬럼(3) + 비교/데이터(5) + 프로세스(2) + 구조(3) + 이미지(3) + 조직/일정(3) + 스페셜/리스트/그리드/카드(9)
+### 레이아웃 (36종)
+기본(2) + 컬럼(3) + 비교/데이터(5) + 프로세스(2) + 구조(3) + 이미지(3) + 조직/일정(3) + 스페셜/리스트/그리드/카드(9) + **신규(6)**
+
+신규 6종:
+- `VERTICAL_STEPS` — 세로 5단계 (A4 세로 친화)
+- `TIMELINE_VERTICAL` — 세로 타임라인 (A4 세로 친화)
+- `HEADLINE_NUMBER` — 대형 헤드라인 + 큰 숫자 (KPI 강조)
+- `CARD_GRID_6` — 3열×2행 카드 6개
+- `AGENDA_TWO_COL` — 2열 아젠다 10항목
+- `PRICING_TABLE` — 3열 플랜/가격 비교
 
 ## 디렉토리 구조
 

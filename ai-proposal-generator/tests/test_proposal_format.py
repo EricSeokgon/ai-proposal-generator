@@ -235,11 +235,12 @@ class TestPhase2LayoutsBuilder:
             + "\n".join(out_of_bounds[:10])
         )
 
-    def test_layouts_count_30_after_format_change(self):
+    def test_layouts_count_36_after_format_change(self):
+        """LAYOUTS 36종 (기존 30 + 신규 6) 모두 포맷 변경 후 유지."""
         from src.generators import slide_kit
         for fmt in ["legacy_16_9", "delivery_a4_portrait", "presentation_a4_landscape"]:
             slide_kit.apply_format(fmt)
-            assert len(slide_kit.LAYOUTS) == 30, f"{fmt}: LAYOUTS 30종 아님"
+            assert len(slide_kit.LAYOUTS) == 36, f"{fmt}: LAYOUTS 36종 아님"
         slide_kit.apply_format("legacy_16_9")
 
     def test_per_format_margins(self):

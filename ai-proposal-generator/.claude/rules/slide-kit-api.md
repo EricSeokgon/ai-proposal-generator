@@ -36,7 +36,8 @@ from src.generators.slide_kit import *
 | **상수 (v3.6)** | `FONT_W`, `SHADOW`, `GRAD` | 폰트 웨이트, 그림자 프리셋, 그라디언트 프리셋 |
 | **컬러 유틸** | `darken()`, `lighten()` | RGBColor 밝기 조절 |
 | **Zone** | `Z`, `GAP`, `CGAP`, `CW_IN`, `ML_IN` | 표준 영역, 간격 |
-| **레이아웃** | `LAYOUTS`, `get_zones()`, `zone_to_inches()`, `list_layouts()` | 20가지 프리셋 |
+| **레이아웃** | `LAYOUTS`, `get_zones()`, `zone_to_inches()`, `list_layouts()` | **36종 프리셋** (apply_format 동적 재계산) |
+| **포맷** | `apply_format()`, `_build_layouts()`, `_build_zones()` | 3 포맷 (16:9 / A4 세로 / A4 가로) |
 | **도형** | `R()`, `BOX()`, `OBOX()`, `RBOX()`, `ORBOX()`, `CARD()` | 사각형, 텍스트 박스, 라운드, 카드 |
 | **텍스트** | `T(fn=)`, `RT()`, `MT()` | 단일/리치/멀티라인 |
 | **이펙트** | `gradient_bg()`, `bg()`, `set_char_spacing()`, `gradient_shape()`, `add_shadow(preset=)`, `OVERLAY()` | 배경, 그래디언트, 그림자 |
@@ -49,6 +50,6 @@ from src.generators.slide_kit import *
 | **시각화 헬퍼** | `IMG_PH()`, `PROGRESS_BAR()`, `METRIC_CARD()`, `STEP_ARROW()`, `DONUT_LABEL()` | 보조 시각요소 |
 | **슬라이드** | `slide_cover()`, `slide_section_divider()`, `slide_toc()`, `slide_exec_summary()`, `slide_next_step()`, `slide_closing()` | 표지, 구분자, 목차, 요약, CTA, 마지막 |
 | **자동 배치** | `VStack` | 자동 Y좌표 계산, 겹침 방지 |
-| **테마** | `THEMES`, `apply_theme()`, `reset_theme()`, `list_themes()` | 5가지 테마 |
+| **테마** | `THEMES`, `apply_theme()`, `reset_theme()`, `list_themes()` | **10가지 테마** |
 | **검증** | `validate_sequence()` | 레이아웃 시퀀스 검증 |
 | **유틸** | `new_presentation()`, `new_presentation_from_template()`, `new_slide()`, `save_pptx()`, `_cols()` | 생성, 템플릿, 저장 |
