@@ -102,18 +102,19 @@ class BaseAgent(ABC):
     ) -> str:
         """공공입찰 분기 프롬프트 + 도메인 카드 + 평가기준 카드 통합 로드
 
-        - proposal_type=PUBLIC이면 ``{prompt_name}_public.txt``를 우선,
-          없으면 ``{prompt_name}.txt``로 폴백.
-        - public_domain이 주어지면 해당 도메인 카드(``config/domains/*.md``)를 부록 합류.
-        - include_bidding_cards=True이면 평가기준+컴플라이언스 카드를 항상 합류.
-        - 모든 부록은 응답 마지막에 ``## 부록``으로 추가.
+        - ``proposal_type=PUBLIC`` 이면 ``{prompt_name}_public.txt`` 우선,
+          없으면 ``{prompt_name}.txt`` 폴백.
+        - ``public_domain`` 이 주어지면 해당 도메인 카드(``config/domains/*.md``)를 부록 합류.
+          **PUBLIC 이 아니어도 도메인 카드는 합류** (예: IT_SYSTEM + force_domain="ai").
+        - 평가기준·컴플라이언스 카드(``include_bidding_cards``)는 **PUBLIC 분기에서만** 합류.
+        - 모든 부록은 응답 마지막에 ``## 부록`` 으로 추가.
 
         Args:
             prompt_name: 프롬프트 파일 베이스명 (예: "phase4_action").
-                ``phase{N}_{name}`` 형식이면 PUBLIC 분기에서 ``phase{N}_{name}_public``로 라우팅.
+                ``phase{N}_{name}`` 형식이면 PUBLIC 분기에서 ``phase{N}_{name}_public`` 로 라우팅.
             proposal_type: ProposalType enum (옵션)
-            public_domain: PublicDomain enum (옵션, PUBLIC일 때만 의미 있음)
-            include_bidding_cards: 평가기준+컴플라이언스 카드 합류 여부
+            public_domain: PublicDomain enum (옵션) — 비-PUBLIC 에서도 도메인 카드만 합류
+            include_bidding_cards: 평가기준+컴플라이언스 카드 합류 여부 (PUBLIC 한정)
 
         Returns:
             합쳐진 system prompt 문자열
@@ -155,15 +156,25 @@ class BaseAgent(ABC):
             logger.error(f"프롬프트 로드 실패: {prompt_name} (PUBLIC 분기={proposal_type==ProposalType.PUBLIC})")
             return ""
 
-        # 2) 부록 카드 합류 (PUBLIC 분기에만 적용)
-        if proposal_type != ProposalType.PUBLIC:
+        # 2) 부록 카드 합류
+        # - 평가기준·컴플라이언스 카드: PUBLIC 분기에서만 합류
+        # - 도메인 카드: PUBLIC 외에도 public_domain 이 명시되면 합류
+        is_public = proposal_type == ProposalType.PUBLIC
+        merge_bidding_cards = is_public and include_bidding_cards
+        if not merge_bidding_cards and public_domain is None:
             return base_text
 
-        card_paths = get_domain_card_paths(public_domain, include_bidding_cards)
+        card_paths = get_domain_card_paths(
+            public_domain,
+            include_bidding_cards=merge_bidding_cards,
+        )
         if not card_paths:
             return base_text
 
-        appendix_parts = ["", "", "---", "", "# 부록 (자동 합류)"]
+        appendix_header = (
+            "# 부록 (자동 합류)" if is_public else "# 부록 (도메인 컨텍스트 — 비-공공)"
+        )
+        appendix_parts = ["", "", "---", "", appendix_header]
         for rel in card_paths:
             card_path = self.project_root / rel
             if not card_path.exists():

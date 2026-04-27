@@ -18,6 +18,10 @@ from ..utils.logger import get_logger
 logger = get_logger("planning_agent")
 
 
+# RFP 유형 추정 실패 시 사용하는 폴백 슬라이드 수 (PROPOSAL_TYPE_CONFIGS 평균치 근사)
+_DEFAULT_SLIDE_ESTIMATE = 70
+
+
 class PlanningAgent(BaseAgent):
     """기획 에이전트 — 4개 서브 에이전트 조율"""
 
@@ -56,7 +60,16 @@ class PlanningAgent(BaseAgent):
                 "message": "구조 기획 시작...",
             })
 
-        # Step 1: 구조 기획 + 디자인 기획 (병렬 실행 가능)
+        # Step 1: 구조 기획 + 디자인 기획 (병렬 실행)
+        # design_planner는 structure_planner 결과를 기다리지 않으므로
+        # RFP project_type 기반 추정 슬라이드 수를 임시로 전달한다.
+        # (디자인 기획은 컬러·타이포·테마 위주라 슬라이드 수에 약하게 의존)
+        estimated_slides = self._estimate_slide_count(rfp)
+        logger.debug(
+            f"design_planner 임시 추정 슬라이드 수: {estimated_slides} "
+            f"(project_type={rfp.get('project_type')})"
+        )
+
         structure_task = self.structure_planner.execute({
             "rfp_analysis": rfp,
             "research": research,
@@ -64,7 +77,10 @@ class PlanningAgent(BaseAgent):
 
         design_task = self.design_planner.execute({
             "rfp_analysis": rfp,
-            "structure": {"total_slides": 80, "win_themes": rfp.get("win_theme_candidates", [])},
+            "structure": {
+                "total_slides": estimated_slides,
+                "win_themes": rfp.get("win_theme_candidates", []),
+            },
             "reference_design": reference_design,
         }, progress_callback)
 
@@ -126,3 +142,25 @@ class PlanningAgent(BaseAgent):
             rfp_analysis=rfp,
             research=research,
         )
+
+    @staticmethod
+    def _estimate_slide_count(rfp: Dict[str, Any]) -> int:
+        """RFP project_type 기반 권장 페이지 범위의 평균 추정값.
+
+        StructurePlanner 결과를 기다리지 않고 DesignPlanner를 병렬 실행하기 위해
+        ``PROPOSAL_TYPE_CONFIGS[type].total_pages_range`` 의 중간값을 사용한다.
+        실패 시 ``_DEFAULT_SLIDE_ESTIMATE`` 폴백.
+        """
+        try:
+            from config.proposal_types import ProposalType, get_config
+            raw_type = (rfp.get("project_type") or "general").strip().lower()
+            try:
+                ptype = ProposalType(raw_type)
+            except ValueError:
+                ptype = ProposalType.GENERAL
+            cfg = get_config(ptype)
+            lo, hi = cfg.total_pages_range
+            return max(1, (lo + hi) // 2)
+        except Exception as e:
+            logger.warning(f"슬라이드 수 추정 실패, 폴백 사용: {e}")
+            return _DEFAULT_SLIDE_ESTIMATE

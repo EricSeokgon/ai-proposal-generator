@@ -134,10 +134,7 @@ class ProductionAgent(BaseAgent):
 
         qa_section = ""
         if qa_feedback:
-            qa_section = f"""
-## QA 피드백 (이전 생성 결과의 문제점 — 반드시 수정)
-{json.dumps(qa_feedback.get('issues', [])[:20], ensure_ascii=False, indent=2)}
-"""
+            qa_section = self._format_qa_feedback(qa_feedback)
 
         user_message = f"""
 ## 제안서 기획 데이터
@@ -180,6 +177,41 @@ class ProductionAgent(BaseAgent):
             return code_match.group(1)
 
         return response
+
+    @staticmethod
+    def _format_qa_feedback(qa_feedback: Dict) -> str:
+        """QA 피드백을 우선순위 정렬 + 카테고리 요약으로 포맷팅.
+
+        - severity 정렬: critical(0) → warning(1) → info(2) → unknown(3)
+        - 상위 20개만 전달 (critical 누락 방지)
+        - 카운트 메타와 통과 여부를 헤더에 노출
+        """
+        issues = qa_feedback.get("issues", []) or []
+
+        severity_rank = {"critical": 0, "warning": 1, "info": 2}
+        sorted_issues = sorted(
+            issues,
+            key=lambda x: severity_rank.get(str(x.get("severity", "")).lower(), 3),
+        )[:20]
+
+        meta_lines = [
+            f"- 통과 여부: {'PASS' if qa_feedback.get('passed') else 'FAIL'}",
+            f"- 총 이슈: {qa_feedback.get('total_issues', len(issues))}건",
+            f"- Critical: {qa_feedback.get('critical_count', 0)}건",
+            f"- Warning: {qa_feedback.get('warning_count', 0)}건",
+            f"- Info: {qa_feedback.get('info_count', 0)}건",
+        ]
+        summary = qa_feedback.get("summary")
+        if summary:
+            meta_lines.append(f"- 요약: {summary}")
+
+        return (
+            "\n## QA 피드백 (이전 생성 결과의 문제점 — Critical 우선 수정)\n"
+            + "\n".join(meta_lines)
+            + "\n\n### 우선순위 정렬된 이슈 (상위 20건)\n"
+            + json.dumps(sorted_issues, ensure_ascii=False, indent=2)
+            + "\n"
+        )
 
     def _execute_script(self, script_path: str, output_dir: str) -> tuple:
         """생성된 스크립트 실행 — AST 보안 검증 후 subprocess로 격리 실행"""
