@@ -7,6 +7,11 @@ on:
     branches: [main, develop]
   workflow_dispatch:
 
+defaults:
+  run:
+    # 모노 구조 — 모든 Python 코드는 ai-proposal-generator/ 하위에 있음
+    working-directory: ai-proposal-generator
+
 jobs:
   test:
     name: pytest (Python ${{ matrix.python-version }})
@@ -31,7 +36,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: requirements.txt
+          # cache 옵션은 working-directory 미적용 — 절대 경로로 명시
+          cache-dependency-path: ai-proposal-generator/requirements.txt
 
       - name: Install dependencies
         run: |
