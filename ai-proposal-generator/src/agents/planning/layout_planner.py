@@ -5,13 +5,40 @@
 """
 
 import json
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..base_agent import BaseAgent
 from ...schemas.planning_schema import SlideLayouts
 from ...utils.logger import get_logger
 
 logger = get_logger("layout_planner")
+
+# slide_kit.LAYOUTS 30종 키 (단일 소스에서 동적 로딩)
+# 임포트 실패 시 안전 폴백을 위한 30종 키 리스트(slide_kit.py:1036~의 키 목록)
+_SLIDE_KIT_LAYOUTS_FALLBACK = frozenset({
+    "FULL_BODY", "HIGHLIGHT_BODY", "TWO_COL", "THREE_COL", "FOUR_COL",
+    "COMPARE_LR", "HIGHLIGHT_THREE_CARD", "KPI_GRID", "PROCESS_DESC",
+    "TIMELINE_DESC", "PYRAMID_DESC", "MATRIX_DESC", "STAT_ROW",
+    "KEY_VISUAL", "TABLE_INSIGHT", "LEFT_TEXT_RIGHT_IMG",
+    "TOP_IMG_BOTTOM_TEXT", "ORG_CHART", "RISK_CARD", "GANTT",
+    "SPLIT_DARK_LIGHT", "QUOTE_CENTER", "METRIC_HIGHLIGHT", "CHECKLIST",
+    "NUMBERED_STEPS", "TWO_ROW_THREE_COL", "DONUT_STATS",
+    "SIDEBAR_CONTENT", "AGENDA_LIST", "ICON_CARD_4",
+})
+
+
+def _load_valid_layouts() -> frozenset:
+    """slide_kit.LAYOUTS 에서 동적으로 30종 키를 로드 (실패 시 폴백 사용)"""
+    try:
+        from src.generators.slide_kit import LAYOUTS
+        return frozenset(LAYOUTS.keys())
+    except Exception:
+        return _SLIDE_KIT_LAYOUTS_FALLBACK
+
+
+VALID_LAYOUT_NAMES: frozenset = _load_valid_layouts()
+DEFAULT_LAYOUT = "FULL_BODY"  # 화이트리스트 미일치 시 폴백
+
 
 # 콘텐츠 유형별 권장 레이아웃 매핑
 CONTENT_LAYOUT_MAP = {
@@ -148,9 +175,38 @@ class LayoutPlanner(BaseAgent):
             })
 
         assignments = data.get("assignments", [])
-        logger.info(f"레이아웃 배정 완료: {len(assignments)}개 슬라이드")
+        assignments = self._sanitize_assignments(assignments)
+        self.logger.info(f"레이아웃 배정 완료: {len(assignments)}개 슬라이드")
 
         return SlideLayouts(assignments=assignments)
+
+    def _sanitize_assignments(self, raw_assignments: List[Dict]) -> List[Dict]:
+        """Claude 응답의 layout_name 을 30종 화이트리스트로 강제 정합.
+
+        - 유효하지 않은 layout_name → ``DEFAULT_LAYOUT`` 으로 폴백 (경고 로그)
+        - layout_name 누락 → DEFAULT_LAYOUT 사용
+        - 후속 PPTX 렌더링에서 KeyError 가 발생하지 않도록 사전 차단한다.
+        """
+        sanitized: List[Dict] = []
+        for assignment in raw_assignments:
+            if not isinstance(assignment, dict):
+                self.logger.warning(f"잘못된 assignment 항목 (dict 아님): {type(assignment)} — 건너뜀")
+                continue
+            layout_name = assignment.get("layout_name", "")
+            if layout_name not in VALID_LAYOUT_NAMES:
+                self.logger.warning(
+                    f"슬라이드 {assignment.get('slide_index', '?')}: "
+                    f"무효한 layout_name '{layout_name}' → '{DEFAULT_LAYOUT}' 폴백"
+                )
+                assignment = dict(assignment)
+                assignment["layout_name"] = DEFAULT_LAYOUT
+                # 폴백 경위를 rationale 에 명시
+                original_rationale = assignment.get("layout_rationale", "")
+                assignment["layout_rationale"] = (
+                    f"[자동 폴백: '{layout_name}' 미정의] {original_rationale}"
+                ).strip()
+            sanitized.append(assignment)
+        return sanitized
 
     def _get_default_prompt(self) -> str:
         return """당신은 프레젠테이션 레이아웃 디자인 전문가입니다.

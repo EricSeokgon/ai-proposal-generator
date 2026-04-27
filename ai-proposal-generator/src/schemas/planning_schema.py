@@ -1,22 +1,45 @@
 """기획 스키마 (Stage 3)"""
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from .proposal_schema import SlideContent, SlideType, WinTheme
 
+# 슬라이드 수 합리적 범위
+# - 하한 20: GENERAL 최소(50)보다 낮게 잡아 짧은 RFP 허용
+# - 상한 300: MARKETING 최대(150) 의 2배 — 매우 큰 입찰 대응 여유
+MIN_TOTAL_SLIDES = 20
+MAX_TOTAL_SLIDES = 300
+
+
 class SlideSpec(BaseModel):
-    slide_index: int
-    phase_number: int
+    slide_index: int = Field(ge=0, description="0부터 시작하는 슬라이드 인덱스")
+    phase_number: int = Field(ge=0, le=7, description="Impact-8 Phase 번호 (0~7)")
     topic: str
     purpose: str
     slide_type_hint: Optional[str] = None
 
+
 class ProposalStructure(BaseModel):
-    total_slides: int
+    total_slides: int = Field(
+        ge=MIN_TOTAL_SLIDES,
+        le=MAX_TOTAL_SLIDES,
+        description=f"전체 슬라이드 수 ({MIN_TOTAL_SLIDES}~{MAX_TOTAL_SLIDES})",
+    )
     phase_breakdown: Dict[int, int] = Field(description="Phase별 슬라이드 수")
     slide_specs: List[SlideSpec] = Field(default_factory=list)
     win_themes: List[WinTheme] = Field(default_factory=list)
     one_sentence_pitch: Optional[str] = None
     proposal_type: str = "general"
+
+    @field_validator("phase_breakdown")
+    @classmethod
+    def _validate_phase_breakdown(cls, v: Dict[int, int]) -> Dict[int, int]:
+        """phase_breakdown 의 음수/잘못된 키 차단 (합계 검증은 사후 워닝)"""
+        for phase, count in v.items():
+            if not isinstance(phase, int) or phase < 0 or phase > 7:
+                raise ValueError(f"phase_breakdown 의 phase 키는 0~7 범위 정수여야 함: {phase}")
+            if not isinstance(count, int) or count < 0:
+                raise ValueError(f"phase_breakdown[{phase}] 는 0 이상 정수여야 함: {count}")
+        return v
 
 class SlideScript(BaseModel):
     slide_index: int
