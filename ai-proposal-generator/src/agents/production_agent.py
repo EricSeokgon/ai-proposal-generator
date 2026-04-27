@@ -4,18 +4,47 @@
 ProposalPlan → slide_kit Python 코드 생성 → PPTX 렌더링
 """
 
+import ast
 import json
 import os
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .base_agent import BaseAgent
 from ..schemas.production_schema import ProductionResult
 from ..utils.logger import get_logger
 
 logger = get_logger("production_agent")
+
+
+# ────────────────────────────────────────────────
+# 생성 스크립트 보안 검증 정책
+# ────────────────────────────────────────────────
+# 차단 대상 모듈 — 임의 명령 실행/네트워크/직렬화 위험
+_BLOCKED_IMPORT_ROOTS = {
+    "subprocess", "socket", "ctypes", "ftplib", "telnetlib", "smtplib",
+    "pickle", "marshal", "shelve", "multiprocessing", "asyncio.subprocess",
+    "urllib", "urllib2", "urllib3", "requests", "httpx", "aiohttp",
+    "paramiko", "fabric", "winreg", "_winreg", "msvcrt",
+}
+
+# 차단 대상 함수 호출 — 동적 실행/임의 코드 평가
+_BLOCKED_CALL_NAMES = {
+    "eval", "exec", "compile", "__import__",
+    "execfile",  # py2 잔재 — 발견 시 차단
+}
+
+# 차단 대상 속성 호출 — os.system / os.popen / shutil.rmtree 등
+_BLOCKED_ATTR_CALLS = {
+    ("os", "system"), ("os", "popen"), ("os", "execv"), ("os", "execve"),
+    ("os", "execvp"), ("os", "execvpe"), ("os", "spawn"), ("os", "spawnv"),
+    ("os", "remove"), ("os", "removedirs"), ("os", "unlink"), ("os", "rmdir"),
+    ("shutil", "rmtree"), ("shutil", "move"),
+    ("pathlib.Path", "unlink"),  # Path().unlink() — 베스트 에포트
+}
 
 
 class ProductionAgent(BaseAgent):
@@ -153,17 +182,37 @@ class ProductionAgent(BaseAgent):
         return response
 
     def _execute_script(self, script_path: str, output_dir: str) -> tuple:
-        """생성된 스크립트 실행"""
-        errors = []
+        """생성된 스크립트 실행 — AST 보안 검증 후 subprocess로 격리 실행"""
+        errors: List[str] = []
         pptx_path = None
 
+        # ── 보안: AST 정적 분석으로 위험 패턴 차단 ──
+        try:
+            source = Path(script_path).read_text(encoding="utf-8")
+        except OSError as e:
+            errors.append(f"스크립트 읽기 실패: {e}")
+            return None, errors
+
+        violations = self._validate_script_safety(source)
+        if violations:
+            for v in violations:
+                logger.error(f"[보안] 차단: {v}")
+            errors.append(
+                "보안 검증 실패 — 위험 패턴이 감지되어 실행을 거부했습니다:\n  - "
+                + "\n  - ".join(violations)
+            )
+            return None, errors
+
+        # ── 격리 실행 ──
+        # 동일 Python 인터프리터 사용 (Windows에서 python3 누락 회피 + venv 일치 보장)
+        # cwd는 PROJECT_ROOT (스크립트 내부 ../../.. 경로 계산과 무관하게 안전)
         try:
             result = subprocess.run(
-                ["python3", script_path],
+                [sys.executable, script_path],
                 capture_output=True,
                 text=True,
                 timeout=120,
-                cwd=os.path.dirname(os.path.dirname(os.path.dirname(script_path))),
+                cwd=str(self.settings.base_dir),
             )
 
             if result.returncode != 0:
@@ -184,6 +233,68 @@ class ProductionAgent(BaseAgent):
             errors.append(f"스크립트 실행 예외: {str(e)}")
 
         return pptx_path, errors
+
+    @staticmethod
+    def _validate_script_safety(source: str) -> List[str]:
+        """생성 스크립트의 AST를 검사해 위험 패턴 목록 반환 (빈 리스트 = 안전)"""
+        violations: List[str] = []
+
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as e:
+            return [f"구문 오류: line {e.lineno}: {e.msg}"]
+
+        for node in ast.walk(tree):
+            # 1) import 검사
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".")[0]
+                    if root in _BLOCKED_IMPORT_ROOTS:
+                        violations.append(
+                            f"line {node.lineno}: 차단된 모듈 import: {alias.name}"
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    root = node.module.split(".")[0]
+                    if root in _BLOCKED_IMPORT_ROOTS:
+                        violations.append(
+                            f"line {node.lineno}: 차단된 모듈 from-import: {node.module}"
+                        )
+
+            # 2) 함수 호출 검사
+            elif isinstance(node, ast.Call):
+                # eval(...), exec(...) 등 직접 호출
+                if isinstance(node.func, ast.Name) and node.func.id in _BLOCKED_CALL_NAMES:
+                    violations.append(
+                        f"line {node.lineno}: 차단된 함수 호출: {node.func.id}()"
+                    )
+                # os.system(...), shutil.rmtree(...) 등 속성 호출
+                elif isinstance(node.func, ast.Attribute):
+                    target = ProductionAgent._resolve_attr_chain(node.func)
+                    if target:
+                        # 마지막 두 토큰만 비교 (예: 'os.system', 'shutil.rmtree')
+                        parts = target.split(".")
+                        if len(parts) >= 2:
+                            tail = (parts[-2], parts[-1])
+                            if tail in _BLOCKED_ATTR_CALLS:
+                                violations.append(
+                                    f"line {node.lineno}: 차단된 속성 호출: {target}()"
+                                )
+
+        return violations
+
+    @staticmethod
+    def _resolve_attr_chain(node: ast.Attribute) -> Optional[str]:
+        """ast.Attribute 체인을 'a.b.c' 문자열로 환원 (실패 시 None)"""
+        parts: List[str] = []
+        current: ast.AST = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+            return ".".join(reversed(parts))
+        return None
 
     def _load_slide_kit_reference(self) -> str:
         """slide_kit API 레퍼런스 로드"""

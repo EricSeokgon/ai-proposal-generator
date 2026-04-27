@@ -686,26 +686,84 @@ PUBLIC_BIDDING_CARDS: List[str] = [
 ]
 
 
+def _keyword_weight(keyword: str) -> int:
+    """키워드 길이 기반 변별력 가중치 (긴 키워드 = 높은 변별력)
+
+    - 1~2글자: 1점 (예: "AI", "DR" — 우연 일치 가능)
+    - 3~4글자: 2점 (예: "CCTV", "MLOps")
+    - 5글자 이상: 3점 (예: "데이터 거버넌스", "K-Cloud 전환")
+    """
+    n = len(keyword.strip())
+    if n <= 2:
+        return 1
+    if n <= 4:
+        return 2
+    return 3
+
+
+# 도메인 매칭 임계 가중치 — 길이 가중치 합산 기준
+PUBLIC_DOMAIN_MATCH_THRESHOLD = 3
+
+
 def detect_public_domain(text: str) -> Optional[PublicDomain]:
     """RFP 텍스트로부터 공공입찰 도메인을 자동 감지
 
-    각 도메인 키워드의 매칭 점수를 계산해 최고 점수 도메인 반환.
-    매칭이 약하면 None.
+    가중치 합산 알고리즘:
+    1. 각 키워드는 길이에 따라 1~3점 가중치 부여 (변별력 비례)
+    2. 같은 키워드 여러 번 등장해도 1회만 카운트 (다양성 우선)
+    3. 도메인별 합산 점수 중 최고값 도메인 반환
+    4. 최고 점수가 임계값(``PUBLIC_DOMAIN_MATCH_THRESHOLD``=3) 미만이면 None
+
+    Returns:
+        PublicDomain | None — 최고 변별력 도메인 또는 매칭 부족 시 None
     """
     if not text:
         return None
 
+    try:
+        from src.utils.logger import get_logger
+        logger = get_logger("domain_detect")
+    except Exception:
+        logger = None
+
     text_lower = text.lower()
     scores: Dict[PublicDomain, int] = {}
+    match_details: Dict[PublicDomain, List[str]] = {}
 
     for domain, keywords in PUBLIC_DOMAIN_KEYWORDS.items():
-        score = sum(1 for kw in keywords if kw.lower() in text_lower)
-        scores[domain] = score
+        domain_score = 0
+        matched: List[str] = []
+        for kw in keywords:
+            if kw.lower() in text_lower:
+                w = _keyword_weight(kw)
+                domain_score += w
+                matched.append(f"{kw}(+{w})")
+        scores[domain] = domain_score
+        match_details[domain] = matched
 
-    if not scores or max(scores.values()) < 2:
+    if not scores:
         return None
 
-    return max(scores, key=scores.get)
+    best_domain = max(scores, key=scores.get)
+    best_score = scores[best_domain]
+
+    if best_score < PUBLIC_DOMAIN_MATCH_THRESHOLD:
+        if logger:
+            logger.debug(
+                f"도메인 매칭 부족 (best={best_domain.value} score={best_score} "
+                f"< {PUBLIC_DOMAIN_MATCH_THRESHOLD})"
+            )
+        return None
+
+    if logger:
+        runner_up = sorted(scores.items(), key=lambda x: x[1], reverse=True)[1:3]
+        logger.info(
+            f"도메인 감지: {best_domain.value} (score={best_score}, "
+            f"matched={match_details[best_domain][:6]}, "
+            f"runner_up={[(d.value, s) for d, s in runner_up]})"
+        )
+
+    return best_domain
 
 
 def get_domain_card_paths(

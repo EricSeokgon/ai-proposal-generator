@@ -23,10 +23,17 @@ class BaseAgent(ABC):
         model: Optional[str] = None,
     ):
         settings = get_settings()
-        self.api_key = api_key or settings.anthropic_api_key
+        self.api_key = (api_key or settings.anthropic_api_key or "").strip()
+        if not self.api_key:
+            raise ValueError(
+                "ANTHROPIC_API_KEY 가 설정되지 않았습니다. "
+                "환경변수 ANTHROPIC_API_KEY 를 설정하거나 BaseAgent(api_key=...) 로 전달하세요."
+            )
         self.model = model or settings.claude_model
+        self.settings = settings
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.prompts_dir = settings.prompts_dir
+        self.project_root = settings.base_dir
 
     @abstractmethod
     async def execute(
@@ -119,22 +126,33 @@ class BaseAgent(ABC):
 
         # 1) Phase 프롬프트 본체 로드 (PUBLIC 분기는 prompt_name이 phase{N}_{name} 형식일 때만)
         base_text = ""
+        public_prompt_attempted = False
         if proposal_type == ProposalType.PUBLIC and prompt_name.startswith("phase"):
             try:
                 phase_num = int(prompt_name[5:].split("_", 1)[0])
+                public_prompt_attempted = True
                 relative = get_prompt_file(phase_num, ProposalType.PUBLIC)
                 base_path = Path(relative)
                 if not base_path.is_absolute():
-                    base_path = self.prompts_dir.parent.parent / relative
+                    base_path = self.project_root / relative
                 if base_path.exists():
                     base_text = base_path.read_text(encoding="utf-8")
-            except (ValueError, IndexError):
-                pass
+                    logger.debug(f"공공입찰 프롬프트 로드: {base_path.name}")
+                else:
+                    logger.warning(
+                        f"공공입찰 프롬프트 부재 → 마케팅 폴백: "
+                        f"expected={base_path}, fallback={prompt_name}.txt"
+                    )
+            except (ValueError, IndexError) as e:
+                logger.warning(f"phase 번호 추출 실패({prompt_name}): {e} — 마케팅 폴백")
 
         if not base_text:
             base_text = self._load_prompt(prompt_name)
+            if proposal_type == ProposalType.PUBLIC and public_prompt_attempted and base_text:
+                logger.info(f"PUBLIC 분기에서 마케팅 프롬프트로 폴백: {prompt_name}.txt")
 
         if not base_text:
+            logger.error(f"프롬프트 로드 실패: {prompt_name} (PUBLIC 분기={proposal_type==ProposalType.PUBLIC})")
             return ""
 
         # 2) 부록 카드 합류 (PUBLIC 분기에만 적용)
@@ -146,9 +164,8 @@ class BaseAgent(ABC):
             return base_text
 
         appendix_parts = ["", "", "---", "", "# 부록 (자동 합류)"]
-        project_root = self.prompts_dir.parent.parent
         for rel in card_paths:
-            card_path = project_root / rel
+            card_path = self.project_root / rel
             if not card_path.exists():
                 logger.warning(f"도메인 카드 누락: {card_path}")
                 continue
@@ -189,8 +206,9 @@ class BaseAgent(ABC):
         logger.error("JSON 추출 실패")
         return {}
 
-    def _truncate_text(self, text: str, max_chars: int = 30000) -> str:
-        """텍스트 길이 제한"""
-        if len(text) <= max_chars:
+    def _truncate_text(self, text: str, max_chars: Optional[int] = None) -> str:
+        """텍스트 길이 제한 (None이면 settings.max_text_chars 사용)"""
+        limit = max_chars if max_chars is not None else self.settings.max_text_chars
+        if len(text) <= limit:
             return text
-        return text[:max_chars] + "\n\n... (텍스트가 잘렸습니다)"
+        return text[:limit] + "\n\n... (텍스트가 잘렸습니다)"

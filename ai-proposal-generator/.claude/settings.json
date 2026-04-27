@@ -4,7 +4,11 @@
       "Bash(python -m py_compile src/agents/base_agent.py)",
       "Bash(python -m py_compile src/agents/analysis_agent.py src/agents/base_agent.py src/schemas/rfp_schema.py config/proposal_types.py)",
       "Bash(python -m py_compile config/proposal_types.py src/agents/base_agent.py src/agents/analysis_agent.py src/schemas/rfp_schema.py)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(venv/Scripts/python.exe -m pip list)",
+      "Bash(venv/Scripts/python.exe -m pip install python-dotenv anthropic --quiet)",
+      "Bash(venv/Scripts/python.exe -m pip install loguru --quiet)",
+      "Bash(venv/Scripts/python.exe -c ' *)"
     ]
   }
 }

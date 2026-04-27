@@ -6,13 +6,42 @@ RFP 또는 기획안 문서를 분석하여 구조화된 정보 추출.
 """
 
 import json
-from typing import Any, Callable, Dict, Optional
+import re
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .base_agent import BaseAgent
 from ..schemas.rfp_schema import RFPAnalysis
 from ..utils.logger import get_logger
 
 logger = get_logger("analysis_agent")
+
+
+# ────────────────────────────────────────────────
+# 공공입찰 신호어 가중치 사전
+# ────────────────────────────────────────────────
+# strong (3점): 단독으로 거의 PUBLIC 확정 — 공공조달·평가체계 고유어
+# medium (2점): 공공 컨텍스트에서 자주 등장 — 단독으론 약하지만 누적 강함
+# weak (1점): 일반어지만 누적되면 PUBLIC 가능성 ↑
+PUBLIC_SIGNAL_WEIGHTS: Dict[str, int] = {
+    # strong — 즉시 결정적
+    "나라장터": 3, "조달청": 3, "협상에 의한 계약": 3, "적격심사": 3,
+    "기술능력평가": 3, "기술제안서": 3, "추정가격": 3, "예정가격": 3,
+    "공고번호": 3, "입찰공고": 3, "ISMS-P": 3, "KCMVP": 3, "CSAP": 3,
+    "정량평가": 3, "정성평가": 3, "평가기준표": 3,
+    # medium — 공공 컨텍스트의 보조 신호
+    "공공기관": 2, "지방자치단체": 2, "지자체": 2, "행정안전부": 2,
+    "행안부": 2, "과기정통부": 2, "기획재정부": 2, "배점": 2,
+    "가격평가": 2, "유사실적": 2, "수행실적": 2, "용역": 2,
+    "CC인증": 2, "GS인증": 2,
+    # weak — 일반어
+    "정부": 1,
+}
+
+# 영문 약어(혼동 방지: 단어 경계 매칭 필요)
+PUBLIC_SIGNAL_REGEX_KEYS = {"ISMS-P", "KCMVP", "CSAP", "CC인증", "GS인증"}
+
+# 임계 가중치 — 강한 1개(3점) + 보조 1~2개, 또는 보조 다수
+PUBLIC_SIGNAL_THRESHOLD = 5
 
 
 class AnalysisAgent(BaseAgent):
@@ -82,10 +111,10 @@ class AnalysisAgent(BaseAgent):
                 "message": "Claude 분석 수행 중...",
             })
 
-        raw_text = self._truncate_text(raw_text_full, 25000)
+        raw_text = self._truncate_text(raw_text_full, self.settings.max_rfp_text_chars)
         tables_json = json.dumps(
             input_data.get("tables", [])[:10], ensure_ascii=False, indent=2
-        )[:5000]
+        )[: self.settings.max_tables_chars]
 
         user_message = self._build_user_message(
             raw_text, tables_json, is_public, public_domain, document_type
@@ -130,7 +159,12 @@ class AnalysisAgent(BaseAgent):
         force_public: bool = False,
         force_domain: Optional[str] = None,
     ):
-        """공공입찰 여부 + 도메인 자동 감지"""
+        """공공입찰 여부 + 도메인 자동 감지
+
+        가중치 합산 점수가 ``PUBLIC_SIGNAL_THRESHOLD`` (=5) 이상이면 PUBLIC 분기.
+        한 키워드가 여러 번 나와도 1회만 카운트(빈도 가중치 X) — 다양성 우선.
+        영문 약어는 ``\\b`` 단어 경계 정규식으로 매칭 (우연 부분일치 방지).
+        """
         from config.proposal_types import PublicDomain, detect_public_domain
 
         # 강제 도메인 우선
@@ -144,24 +178,42 @@ class AnalysisAgent(BaseAgent):
         if force_public:
             return True, detect_public_domain(text)
 
-        # 자동 감지 — 공공입찰 신호어
-        public_signals = [
-            "나라장터", "조달청", "공공기관", "지방자치단체", "지자체",
-            "정부", "행정안전부", "행안부", "과기정통부", "기획재정부",
-            "협상에 의한 계약", "적격심사", "기술능력평가", "가격평가",
-            "평가기준표", "배점", "추정가격", "예정가격",
-            "공고번호", "용역", "입찰공고",
-            "기술제안서", "정량평가", "정성평가",
-            "ISMS-P", "CSAP", "CC인증", "GS인증", "KCMVP",
-            "유사실적", "수행실적",
-        ]
-        text_lower = text.lower() if text else ""
-        public_score = sum(1 for sig in public_signals if sig.lower() in text_lower)
+        if not text:
+            return False, None
 
-        if public_score >= 3:
+        score, matched = self._score_public_signals(text)
+
+        if score >= PUBLIC_SIGNAL_THRESHOLD:
+            logger.info(
+                f"공공입찰 신호 감지 (score={score} ≥ {PUBLIC_SIGNAL_THRESHOLD}): "
+                f"matched={matched[:8]}"
+            )
             return True, detect_public_domain(text)
 
+        logger.debug(
+            f"공공입찰 신호 부족 (score={score} < {PUBLIC_SIGNAL_THRESHOLD}): "
+            f"matched={matched}"
+        )
         return False, None
+
+    @staticmethod
+    def _score_public_signals(text: str) -> Tuple[int, List[str]]:
+        """가중치 합산 점수와 매칭된 키워드 목록 반환"""
+        text_lower = text.lower()
+        score = 0
+        matched: List[str] = []
+        for keyword, weight in PUBLIC_SIGNAL_WEIGHTS.items():
+            if keyword in PUBLIC_SIGNAL_REGEX_KEYS:
+                # 영문 약어: 양쪽이 alphanumeric이 아닐 때만 매칭
+                pattern = r"(?<![A-Za-z0-9])" + re.escape(keyword) + r"(?![A-Za-z0-9])"
+                if re.search(pattern, text, re.IGNORECASE):
+                    score += weight
+                    matched.append(f"{keyword}(+{weight})")
+            else:
+                if keyword.lower() in text_lower:
+                    score += weight
+                    matched.append(f"{keyword}(+{weight})")
+        return score, matched
 
     def _build_system_prompt(
         self,
