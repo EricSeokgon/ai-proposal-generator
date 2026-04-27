@@ -112,6 +112,61 @@ THEME_CSS = {
 class DesignAgent(BaseAgent):
     """디자인 에이전트 — Claude로 슬라이드별 HTML 자동 생성"""
 
+    # 시스템 디렉토리 — 출력 경로로 사용 차단 (path traversal 방어)
+    _BLOCKED_OUTPUT_ROOTS = (
+        Path("/etc"), Path("/sys"), Path("/proc"), Path("/boot"), Path("/root"),
+        Path("C:\\Windows"), Path("C:\\Program Files"), Path("C:\\Program Files (x86)"),
+    )
+
+    @staticmethod
+    def _resolve_safe_output_dir(raw: Any) -> str:
+        """``output_dir`` 입력을 정규화하고 시스템 경로 escape 를 차단.
+
+        - 상대 경로 → ``settings.base_dir`` 기준으로 해석
+        - 절대 경로 → 그대로 정규화 (``Path.resolve()``)
+        - 시스템 디렉토리(``/etc``, ``C:\\Windows`` 등) 아래로 escape 시도 시 ValueError
+        - ``base_dir`` 외부 경로는 워닝만 (차단하지 않음 — 사용자 명시적 외부 출력 허용)
+
+        Returns:
+            정규화된 절대 경로 문자열
+        """
+        from config.settings import get_settings
+        settings = get_settings()
+        base = settings.base_dir.resolve()
+
+        if raw is None or str(raw).strip() == "":
+            raw = "output/design"
+
+        candidate = Path(str(raw))
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        candidate = candidate.resolve()
+
+        # 시스템 경로 escape 차단
+        for blocked in DesignAgent._BLOCKED_OUTPUT_ROOTS:
+            try:
+                blocked_resolved = blocked.resolve()
+            except (OSError, RuntimeError):
+                continue  # 해당 OS 에 존재하지 않는 경로
+            try:
+                candidate.relative_to(blocked_resolved)
+            except ValueError:
+                continue  # blocked 아래가 아님 → 안전
+            raise ValueError(
+                f"output_dir 이 시스템 경로({blocked_resolved}) 아래로 지정됨: {candidate}"
+            )
+
+        # base_dir 외부 경로 워닝 (강제 차단은 안 함)
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            logger.warning(
+                f"output_dir 이 프로젝트 루트({base}) 외부: {candidate} — "
+                f"의도된 경우 무시하세요"
+            )
+
+        return str(candidate)
+
     async def execute(
         self,
         input_data: Dict[str, Any],
@@ -143,11 +198,14 @@ class DesignAgent(BaseAgent):
             }
         """
         plan = input_data.get("plan", {})
-        output_dir = input_data.get("output_dir", "output/design")
+        raw_output_dir = input_data.get("output_dir", "output/design")
         design_reference = input_data.get("design_reference")
         design_note = input_data.get("design_note", "")
         theme = input_data.get("theme", "warm_minimal")
         concurrency = max(1, min(8, int(input_data.get("concurrency", 4))))
+
+        # 보안: output_dir 정규화 + 시스템 경로 차단
+        output_dir = self._resolve_safe_output_dir(raw_output_dir)
 
         prompt_dir = os.path.join(output_dir, "prompts")
         html_dir = os.path.join(output_dir, "html")
