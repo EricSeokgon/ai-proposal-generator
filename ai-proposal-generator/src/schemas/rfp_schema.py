@@ -4,7 +4,7 @@ RFP 분석 결과 스키마
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EvaluationCriterion(BaseModel):
@@ -174,8 +174,8 @@ class RFPAnalysis(BaseModel):
         default=None, description="원본 섹션 데이터"
     )
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "project_name": "스마트시티 통합 플랫폼 구축",
                 "client_name": "서울특별시",
@@ -196,3 +196,4 @@ class RFPAnalysis(BaseModel):
                 ],
             }
         }
+    )

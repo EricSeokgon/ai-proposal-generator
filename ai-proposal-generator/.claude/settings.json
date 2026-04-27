@@ -8,7 +8,9 @@
       "Bash(venv/Scripts/python.exe -m pip list)",
       "Bash(venv/Scripts/python.exe -m pip install python-dotenv anthropic --quiet)",
       "Bash(venv/Scripts/python.exe -m pip install loguru --quiet)",
-      "Bash(venv/Scripts/python.exe -c ' *)"
+      "Bash(venv/Scripts/python.exe -c ' *)",
+      "Bash(venv/Scripts/python.exe -m pip install pytest pytest-asyncio --quiet)",
+      "Bash(PYTHONIOENCODING=utf-8 venv/Scripts/python.exe -m pytest -v)"
     ]
   }
 }
