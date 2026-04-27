@@ -124,6 +124,9 @@ JSON 배열로 응답해주세요: ["쿼리1", "쿼리2", ...]"""
         """
         system_prompt = self._load_prompt("research")
         if not system_prompt:
+            self.logger.warning(
+                "프롬프트 부재 (research.txt) → 내장 default 사용"
+            )
             system_prompt = self._get_default_research_prompt()
 
         user_message = f"""

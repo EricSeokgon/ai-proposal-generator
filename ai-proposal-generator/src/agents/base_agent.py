@@ -11,6 +11,7 @@ import anthropic
 from ..utils.logger import get_logger
 from config.settings import get_settings
 
+# 모듈 레벨 폴백 logger (인스턴스 생성 전 import-time 사용)
 logger = get_logger("agent")
 
 
@@ -34,6 +35,8 @@ class BaseAgent(ABC):
         self.client = anthropic.Anthropic(api_key=self.api_key)
         self.prompts_dir = settings.prompts_dir
         self.project_root = settings.base_dir
+        # 인스턴스별 logger — 서브클래스 호출 추적 가능 (예: AnalysisAgent → "analysis_agent")
+        self.logger = get_logger(self.__class__.__name__)
 
     @abstractmethod
     async def execute(
@@ -61,7 +64,7 @@ class BaseAgent(ABC):
         Returns:
             Claude 응답 텍스트
         """
-        logger.debug(f"Claude API 호출 (model: {self.model})")
+        self.logger.debug(f"Claude API 호출 (model: {self.model})")
 
         try:
             message = self.client.messages.create(
@@ -72,7 +75,7 @@ class BaseAgent(ABC):
             )
             return message.content[0].text
         except Exception as e:
-            logger.error(f"Claude API 호출 실패: {e}")
+            self.logger.error(f"Claude API 호출 실패: {e}")
             raise
 
     def _load_prompt(self, prompt_name: str) -> str:
@@ -88,7 +91,7 @@ class BaseAgent(ABC):
         prompt_path = self.prompts_dir / f"{prompt_name}.txt"
 
         if not prompt_path.exists():
-            logger.warning(f"프롬프트 파일 없음: {prompt_path}")
+            self.logger.warning(f"프롬프트 파일 없음: {prompt_path}")
             return ""
 
         return prompt_path.read_text(encoding="utf-8")
@@ -138,22 +141,22 @@ class BaseAgent(ABC):
                     base_path = self.project_root / relative
                 if base_path.exists():
                     base_text = base_path.read_text(encoding="utf-8")
-                    logger.debug(f"공공입찰 프롬프트 로드: {base_path.name}")
+                    self.logger.debug(f"공공입찰 프롬프트 로드: {base_path.name}")
                 else:
-                    logger.warning(
+                    self.logger.warning(
                         f"공공입찰 프롬프트 부재 → 마케팅 폴백: "
                         f"expected={base_path}, fallback={prompt_name}.txt"
                     )
             except (ValueError, IndexError) as e:
-                logger.warning(f"phase 번호 추출 실패({prompt_name}): {e} — 마케팅 폴백")
+                self.logger.warning(f"phase 번호 추출 실패({prompt_name}): {e} — 마케팅 폴백")
 
         if not base_text:
             base_text = self._load_prompt(prompt_name)
             if proposal_type == ProposalType.PUBLIC and public_prompt_attempted and base_text:
-                logger.info(f"PUBLIC 분기에서 마케팅 프롬프트로 폴백: {prompt_name}.txt")
+                self.logger.info(f"PUBLIC 분기에서 마케팅 프롬프트로 폴백: {prompt_name}.txt")
 
         if not base_text:
-            logger.error(f"프롬프트 로드 실패: {prompt_name} (PUBLIC 분기={proposal_type==ProposalType.PUBLIC})")
+            self.logger.error(f"프롬프트 로드 실패: {prompt_name} (PUBLIC 분기={proposal_type==ProposalType.PUBLIC})")
             return ""
 
         # 2) 부록 카드 합류
@@ -178,7 +181,7 @@ class BaseAgent(ABC):
         for rel in card_paths:
             card_path = self.project_root / rel
             if not card_path.exists():
-                logger.warning(f"도메인 카드 누락: {card_path}")
+                self.logger.warning(f"도메인 카드 누락: {card_path}")
                 continue
             content = card_path.read_text(encoding="utf-8")
             appendix_parts.append("")
@@ -214,7 +217,7 @@ class BaseAgent(ABC):
                 except json.JSONDecodeError:
                     continue
 
-        logger.error("JSON 추출 실패")
+        self.logger.error("JSON 추출 실패")
         return {}
 
     def _truncate_text(self, text: str, max_chars: Optional[int] = None) -> str:

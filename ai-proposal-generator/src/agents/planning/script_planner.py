@@ -102,6 +102,9 @@ class ScriptPlanner(BaseAgent):
 
         system_prompt = self._load_prompt("planning_script")
         if not system_prompt:
+            self.logger.warning(
+                "프롬프트 부재 (planning_script.txt) → 내장 default 사용"
+            )
             system_prompt = self._get_default_prompt()
 
         if phase_prompt:

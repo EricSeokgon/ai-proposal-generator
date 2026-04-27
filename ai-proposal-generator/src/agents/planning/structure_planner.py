@@ -54,6 +54,9 @@ class StructurePlanner(BaseAgent):
 
         system_prompt = self._load_prompt("planning_structure")
         if not system_prompt:
+            self.logger.warning(
+                "프롬프트 부재 (planning_structure.txt) → 내장 default 사용"
+            )
             system_prompt = self._get_default_prompt()
 
         user_message = f"""

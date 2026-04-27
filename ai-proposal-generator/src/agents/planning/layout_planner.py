@@ -69,6 +69,9 @@ class LayoutPlanner(BaseAgent):
 
         system_prompt = self._load_prompt("planning_layout")
         if not system_prompt:
+            self.logger.warning(
+                "프롬프트 부재 (planning_layout.txt) → 내장 default 사용"
+            )
             system_prompt = self._get_default_prompt()
 
         # 스크립트 요약 (토큰 절약)

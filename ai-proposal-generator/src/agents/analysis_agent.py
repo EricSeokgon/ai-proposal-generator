@@ -221,10 +221,22 @@ class AnalysisAgent(BaseAgent):
         public_domain,
         document_type: str,
     ) -> str:
-        """공공입찰이면 도메인 카드+평가기준 합류, 아니면 기본 프롬프트"""
+        """공공입찰이면 도메인 카드+평가기준 합류, 아니면 기본 프롬프트.
+
+        프롬프트 폴백 순서: rfp_analysis.txt → analysis.txt → 내장 default
+        (각 단계 폴백 사유는 ``self.logger`` 에 명시적으로 기록)
+        """
         if is_public:
-            base = self._load_prompt("rfp_analysis") or self._load_prompt("analysis")
+            base = self._load_prompt("rfp_analysis")
             if not base:
+                self.logger.info(
+                    "rfp_analysis.txt 부재 → analysis.txt 로 폴백"
+                )
+                base = self._load_prompt("analysis")
+            if not base:
+                self.logger.warning(
+                    "analysis.txt 도 부재 → 내장 default 시스템 프롬프트 사용"
+                )
                 base = self._get_default_system_prompt("rfp", is_public=True)
 
             # 도메인 카드 + 평가기준 + 컴플라이언스 합류
